@@ -7,7 +7,7 @@
  * - 追踪游戏状态
  */
 
-import { Sudoku } from './sudoku.js';
+import { Sudoku, createSudokuFromJSON } from './sudoku.js';
 
 export class Game {
   /**
@@ -162,10 +162,10 @@ export function createGame(options) {
  * @returns {Game}
  */
 export function createGameFromJSON(json) {
-  const game = new Game({ sudoku: new Sudoku(json.initialSudoku.initialGrid) });
+  const initialSudoku = createSudokuFromJSON(json.initialSudoku);
+  const game = new Game({ sudoku: initialSudoku.clone() });
 
-  game.initialSudoku = new Sudoku(json.initialSudoku.initialGrid);
-  game.initialSudoku.userGrid = json.initialSudoku.userGrid.map(row => [...row]);
+  game.initialSudoku = initialSudoku;
 
   game.history = json.history.map(operation => ({
     type: operation.type,
@@ -174,8 +174,7 @@ export function createGameFromJSON(json) {
   }));
 
   game.currentIndex = json.currentIndex;
-  game.currentSudoku = new Sudoku(json.initialSudoku.initialGrid);
-  game.currentSudoku.userGrid = json.initialSudoku.userGrid.map(row => [...row]);
+  game.currentSudoku = initialSudoku.clone();
 
   for (let index = 0; index < game.currentIndex; index++) {
     const operation = game.history[index];

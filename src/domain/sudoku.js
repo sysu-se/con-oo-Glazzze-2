@@ -1,7 +1,7 @@
 /**
  * Sudoku 类 - 代表单个数独棋盘的核心领域对象
  * 职责：
- * - 持有初始棋盘（只读）和用户输入的棋盘
+ * - 持有初始棋盘（只读）和用户输入的稀疏变更
  * - 提供 guess() 接口来修改棋盘
  * - 提供 clone() 方法用于快照（Undo/Redo 需要）
  * - 提供序列化接口
@@ -14,10 +14,10 @@ export class Sudoku {
   //Sudoku状态持有：持有当前 grid / board 数据
   constructor(initialGrid) {
     // 防御性复制：不允许外部修改初始棋盘
-    this.initialGrid = this._deepCopy(initialGrid);
-    
-    // 用户的猜测棋盘（初始时复制初始棋盘）
-    this.userGrid = this._deepCopy(initialGrid);
+    this.initialGrid = this._freezeGrid(this._deepCopy(initialGrid));
+
+    // 稀疏记录用户改动：key = row * 9 + col, value = 数字
+    this.userMoves = new Map();
   }
 
   /**
@@ -26,7 +26,15 @@ export class Sudoku {
    */
   //读取当前棋盘状态（包括用户输入和初始值）
   getGrid() {
-    return this._deepCopy(this.userGrid);
+    const grid = this._deepCopy(this.initialGrid);
+
+    for (const [key, value] of this.userMoves) {
+      const row = Math.floor(key / 9);
+      const col = key % 9;
+      grid[row][col] = value;
+    }
+
+    return grid;
   }
 
   /**
@@ -43,7 +51,7 @@ export class Sudoku {
    */
   //提供校验能力：当前棋盘是否合法，并返回冲突单元格
   validate() {
-    const grid = this.userGrid;
+    const grid = this.getGrid();
     const invalid = new Set();
 
     // 行冲突
@@ -131,7 +139,18 @@ export class Sudoku {
       return;
     }
 
-    this.userGrid[row][col] = value;
+    const key = this._cellKey(row, col);
+    const currentValue = this.userMoves.has(key) ? this.userMoves.get(key) : 0;
+
+    if (currentValue === value) {
+      return;
+    }
+
+    if (value === 0) {
+      this.userMoves.delete(key);
+    } else {
+      this.userMoves.set(key, value);
+    }
   }
 
   /**
@@ -140,9 +159,9 @@ export class Sudoku {
    * @returns {Sudoku} - 新的 Sudoku 实例
    */
   clone() {
-    const cloned = new Sudoku(this.initialGrid);
-    // 直接赋值用户棋盘的深拷贝
-    cloned.userGrid = this._deepCopy(this.userGrid);
+    const cloned = Object.create(Sudoku.prototype);
+    cloned.initialGrid = this.initialGrid;
+    cloned.userMoves = new Map(this.userMoves);
     return cloned;
   }
 
@@ -153,7 +172,7 @@ export class Sudoku {
   toJSON() {
     return {
       initialGrid: this._deepCopy(this.initialGrid),
-      userGrid: this._deepCopy(this.userGrid),
+      userMoves: Array.from(this.userMoves.entries()),
     };
   }
 
@@ -162,7 +181,7 @@ export class Sudoku {
    * @returns {string} - 棋盘的字符串表示
    */
   toString() {
-    return this._formatGrid(this.userGrid);
+    return this._formatGrid(this.getGrid());
   }
 
   /**
@@ -175,6 +194,26 @@ export class Sudoku {
    */
   _deepCopy(grid) {
     return grid.map(row => [...row]);
+  }
+
+  /**
+   * 冻结二维数组，确保初始棋盘不会被意外修改
+   * @private
+   */
+  _freezeGrid(grid) {
+    for (const row of grid) {
+      Object.freeze(row);
+    }
+
+    return Object.freeze(grid);
+  }
+
+  /**
+   * 计算单元格键值
+   * @private
+   */
+  _cellKey(row, col) {
+    return row * 9 + col;
   }
 
   /**
@@ -226,8 +265,22 @@ export function createSudoku(initialGrid) {
  * @returns {Sudoku}
  */
 export function createSudokuFromJSON(json) {
-  const sudoku = new Sudoku(json.initialGrid);
-  // 恢复用户棋盘状态
-  sudoku.userGrid = json.userGrid.map(row => [...row]);
+  const sudoku = Object.create(Sudoku.prototype);
+  sudoku.initialGrid = sudoku._freezeGrid(sudoku._deepCopy(json.initialGrid));
+  sudoku.userMoves = new Map();
+
+  if (Array.isArray(json.userMoves)) {
+    sudoku.userMoves = new Map(json.userMoves);
+  } else if (Array.isArray(json.userGrid)) {
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const value = json.userGrid[row][col];
+        if (value !== sudoku.initialGrid[row][col]) {
+          sudoku.userMoves.set(row * 9 + col, value);
+        }
+      }
+    }
+  }
+
   return sudoku;
 }
