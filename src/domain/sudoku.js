@@ -11,6 +11,7 @@ export class Sudoku {
   /**
    * @param {number[][]} initialGrid - 9x9 的初始棋盘（0 代表空白）
    */
+  //Sudoku状态持有：持有当前 grid / board 数据
   constructor(initialGrid) {
     // 防御性复制：不允许外部修改初始棋盘
     this.initialGrid = this._deepCopy(initialGrid);
@@ -23,6 +24,7 @@ export class Sudoku {
    * 获取当前棋盘状态（包括用户输入和初始值）
    * @returns {number[][]} - 当前 9x9 棋盘
    */
+  //读取当前棋盘状态（包括用户输入和初始值）
   getGrid() {
     return this._deepCopy(this.userGrid);
   }
@@ -39,6 +41,7 @@ export class Sudoku {
    * 校验当前棋盘是否合法，并返回冲突单元格
    * @returns {{ valid: boolean, invalidCells: string[] }}
    */
+  //提供校验能力：当前棋盘是否合法，并返回冲突单元格
   validate() {
     const grid = this.userGrid;
     const invalid = new Set();
@@ -109,6 +112,7 @@ export class Sudoku {
    * @param {number} move.col - 列号 (0-8)
    * @param {number} move.value - 输入值 (0-9, 0 表示清空)
    */
+  //提供guess() 接口：用户输入数字，修改 userGrid
   guess(move) {
     const { row, col, value } = move;
     
@@ -131,7 +135,7 @@ export class Sudoku {
   }
 
   /**
-   * 克隆当前的 Sudoku 实例
+   * 克隆当前的 Sudoku 实例（即是快照能力）
    * 返回一个完全独立的副本，包括用户输入的棋盘状态
    * @returns {Sudoku} - 新的 Sudoku 实例
    */
@@ -143,7 +147,7 @@ export class Sudoku {
   }
 
   /**
-   * 序列化为 JSON 可表达的对象
+   * 提供序列化能力：序列化为 JSON 可表达的对象
    * @returns {Object} - 包含 initialGrid 和 userGrid 的对象
    */
   toJSON() {
@@ -154,7 +158,7 @@ export class Sudoku {
   }
 
   /**
-   * 转换为可读的字符串形式
+   * 提供外表化能力：转换为可读的字符串形式
    * @returns {string} - 棋盘的字符串表示
    */
   toString() {

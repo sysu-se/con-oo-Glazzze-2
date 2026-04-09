@@ -21,10 +21,10 @@ export class Game {
       throw new Error('Game requires a Sudoku instance');
     }
 
-    // 当前游戏的 Sudoku 状态
+    //持有当前 Sudoku：当前游戏的 Sudoku 状态
     this.currentSudoku = sudoku;
 
-    // 历史堆栈：存储每个步骤的 Sudoku 快照
+    // 管理历史使用历史堆栈：存储每个步骤的 Sudoku 快照
     // 每次 guess 后，当前状态的快照会被添加到这里
     this.history = [sudoku.clone()]; // 初始状态也记录在历史中
 
@@ -37,6 +37,7 @@ export class Game {
    * 用户猜测 - 修改棋盘并记录历史
    * @param {Object} move - { row, col, value }
    */
+  //对外提供面向 UI 的游戏操作入口：guess() 方法，用户输入数字，修改 userGrid，并记录历史
   guess(move) {
     // 1. 如果当前不在历史末尾，删除 redo 栈
     //   （新操作会清除所有"重做"的可能性）
@@ -53,7 +54,7 @@ export class Game {
   }
 
   /**
-   * 撤销上一步操作
+   * undo：撤销上一步操作
    */
   undo() {
     if (this.canUndo()) {
@@ -63,7 +64,7 @@ export class Game {
   }
 
   /**
-   * 重做下一步操作
+   * redo：重做下一步操作
    */
   redo() {
     if (this.canRedo()) {
