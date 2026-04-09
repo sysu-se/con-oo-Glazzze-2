@@ -2,6 +2,8 @@
 	import { modal } from '@sudoku/stores/modal';
 	import { pauseGame, resumeGame } from '@sudoku/game';
 
+	export let gameStore;
+
 	function handleShareButton() {
 		pauseGame();
 		modal.show('share', { onHide: resumeGame });

@@ -4,12 +4,17 @@
 	import game from '@sudoku/game';
 	import { modal } from '@sudoku/stores/modal';
 	import { gameWon } from '@sudoku/stores/game';
+	import { createGameStore } from './stores/gameStore.js';
 	import Board from './components/Board/index.svelte';
 	import Controls from './components/Controls/index.svelte';
 	import Header from './components/Header/index.svelte';
 	import Modal from './components/Modal/index.svelte';
 
-	gameWon.subscribe(won => {
+	// 初始化新的游戏 Store Adapter
+	export let gameStore = createGameStore();
+
+	// 监听游戏赢的状态
+	gameStore.won.subscribe(won => {
 		if (won) {
 			game.pause();
 			modal.show('gameover');
@@ -34,17 +39,17 @@
 
 <!-- Timer, Menu, etc. -->
 <header>
-	<Header />
+	<Header {gameStore} />
 </header>
 
 <!-- Sudoku Field -->
 <section>
-	<Board />
+	<Board {gameStore} />
 </section>
 
 <!-- Keyboard -->
 <footer>
-	<Controls />
+	<Controls {gameStore} />
 </footer>
 
 <Modal />
