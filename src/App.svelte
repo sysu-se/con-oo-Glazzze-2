@@ -11,7 +11,7 @@
 	import Modal from './components/Modal/index.svelte';
 
 	// 初始化新的游戏 Store Adapter
-	export let gameStore = createGameStore();
+	export let gameStore = createGameStore();//典型Svelte 3 风格
 
 	// 监听游戏赢的状态
 	gameStore.won.subscribe(won => {

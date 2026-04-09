@@ -7,6 +7,7 @@
 	// 接收 gameStore 作为 prop
 	export let gameStore;
 
+	//典型Svelte 3 风格
 	$: givenGridStore = gameStore.givenGrid;
 	$: isLockedCell = $cursor.x !== null && $cursor.y !== null && $givenGridStore[$cursor.y]?.[$cursor.x] !== 0;
 	$: keyboardDisabled = $gamePaused || $cursor.x === null || $cursor.y === null || isLockedCell;

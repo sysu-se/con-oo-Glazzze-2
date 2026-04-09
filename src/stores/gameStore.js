@@ -9,7 +9,9 @@
  * - UI 通过这个 adapter 消费领域对象
  */
 
-import { writable, derived } from 'svelte/store';
+
+
+import { writable, derived } from 'svelte/store';//典型Svelte 3 风格
 import { createGame, createSudoku } from '../domain/index.js';
 import { generateSudoku } from '@sudoku/sudoku';
 import { solveSudoku } from '@sudoku/sudoku';
@@ -126,7 +128,7 @@ export function createGameStore(options = {}) {
   const game = createGame({ sudoku });
   let solvedGrid = buildSolvedGrid(initialGrid);
   
-  // 内部可写 store：持有当前的 Game 实例
+  // 内部可写 store：持有当前的 Game 实例（典型Svelte 3 风格）
   const gameInstance = writable(game);
   
   // 响应式 store：当前棋盘网格

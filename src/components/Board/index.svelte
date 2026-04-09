@@ -9,7 +9,7 @@
 	// 接收 gameStore 作为 prop
 	export let gameStore;
 
-	// 先取出子 store，再用 $store 语法订阅
+	// 先取出子 store，再用 $store 语法订阅（典型Svelte 3 风格）
 	$: gridStore = gameStore.grid;
 	$: givenGridStore = gameStore.givenGrid;
 	$: invalidCellsStore = gameStore.invalidCells;
