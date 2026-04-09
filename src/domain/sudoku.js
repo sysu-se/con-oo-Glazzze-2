@@ -36,6 +36,73 @@ export class Sudoku {
   }
 
   /**
+   * 校验当前棋盘是否合法，并返回冲突单元格
+   * @returns {{ valid: boolean, invalidCells: string[] }}
+   */
+  validate() {
+    const grid = this.userGrid;
+    const invalid = new Set();
+
+    // 行冲突
+    for (let row = 0; row < 9; row++) {
+      const seen = new Map();
+      for (let col = 0; col < 9; col++) {
+        const value = grid[row][col];
+        if (value !== 0) {
+          if (seen.has(value)) {
+            invalid.add(`${row},${col}`);
+            invalid.add(`${row},${seen.get(value)}`);
+          } else {
+            seen.set(value, col);
+          }
+        }
+      }
+    }
+
+    // 列冲突
+    for (let col = 0; col < 9; col++) {
+      const seen = new Map();
+      for (let row = 0; row < 9; row++) {
+        const value = grid[row][col];
+        if (value !== 0) {
+          if (seen.has(value)) {
+            invalid.add(`${row},${col}`);
+            invalid.add(`${seen.get(value)},${col}`);
+          } else {
+            seen.set(value, row);
+          }
+        }
+      }
+    }
+
+    // 宫冲突
+    for (let boxRow = 0; boxRow < 3; boxRow++) {
+      for (let boxCol = 0; boxCol < 3; boxCol++) {
+        const seen = new Map();
+        for (let row = boxRow * 3; row < boxRow * 3 + 3; row++) {
+          for (let col = boxCol * 3; col < boxCol * 3 + 3; col++) {
+            const value = grid[row][col];
+            if (value !== 0) {
+              const key = `${row},${col}`;
+              if (seen.has(value)) {
+                invalid.add(key);
+                invalid.add(seen.get(value));
+              } else {
+                seen.set(value, key);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      valid: invalid.size === 0,
+      invalidCells: Array.from(invalid),
+    };
+  }
+
+  /**
    * 用户猜测 - 在指定位置输入数字
    * @param {Object} move - { row, col, value }
    * @param {number} move.row - 行号 (0-8)

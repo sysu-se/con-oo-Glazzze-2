@@ -144,9 +144,8 @@ export function createGameStore(options = {}) {
   
   // 响应式 store：无效单元格集合
   const invalidCells = derived(gameInstance, $game => {
-    const invalid = findInvalidCells($game.getSudoku());
-    // 转为数组格式 ('row,col' 字符串）
-    return Array.from(invalid);
+    const validation = $game.getSudoku().validate();
+    return validation.invalidCells;
   });
   
   // 响应式 store：游戏是否已赢
