@@ -21,15 +21,16 @@ export class Game {
       throw new Error('Game requires a Sudoku instance');
     }
 
-    //持有当前 Sudoku：当前游戏的 Sudoku 状态
+    // 持有当前 Sudoku：当前游戏的 Sudoku 状态
     this.currentSudoku = sudoku;
 
-    // 管理历史使用历史堆栈：存储每个步骤的 Sudoku 快照
-    // 每次 guess 后，当前状态的快照会被添加到这里
-    this.history = [sudoku.clone()]; // 初始状态也记录在历史中
+    // 保留初始 Sudoku，供序列化和恢复使用
+    this.initialSudoku = sudoku.clone();
 
-    // 当前位置指针（指向 history 数组的索引）
-    // 0 表示初始状态，1 表示第一次 guess 后，以此类推
+    // 管理历史：只存储可重放的操作日志，而不是整盘快照
+    this.history = [];
+
+    // 当前位置指针：表示已经应用了多少条操作
     this.currentIndex = 0;
   }
 
@@ -41,16 +42,29 @@ export class Game {
   guess(move) {
     // 1. 如果当前不在历史末尾，删除 redo 栈
     //   （新操作会清除所有"重做"的可能性）
-    if (this.currentIndex < this.history.length - 1) {
-      this.history = this.history.slice(0, this.currentIndex + 1);
+    if (this.currentIndex < this.history.length) {
+      this.history = this.history.slice(0, this.currentIndex);
     }
+
+    const previousValue = this.currentSudoku.getGrid()[move.row][move.col];
 
     // 2. 执行 guess
     this.currentSudoku.guess(move);
 
-    // 3. 当前状态加入历史
+    const nextValue = this.currentSudoku.getGrid()[move.row][move.col];
+
+    // 没有实际变化时，不写入历史
+    if (previousValue === nextValue) {
+      return;
+    }
+
+    // 3. 当前操作加入历史
+    this.history.push({
+      type: 'guess',
+      move: { ...move },
+      previousValue,
+    });
     this.currentIndex++;
-    this.history.push(this.currentSudoku.clone());
   }
 
   /**
@@ -58,8 +72,13 @@ export class Game {
    */
   undo() {
     if (this.canUndo()) {
+      const operation = this.history[this.currentIndex - 1];
+      this.currentSudoku.guess({
+        row: operation.move.row,
+        col: operation.move.col,
+        value: operation.previousValue,
+      });
       this.currentIndex--;
-      this.currentSudoku = this.history[this.currentIndex].clone();
     }
   }
 
@@ -68,8 +87,13 @@ export class Game {
    */
   redo() {
     if (this.canRedo()) {
+      const operation = this.history[this.currentIndex];
+      this.currentSudoku.guess({
+        row: operation.move.row,
+        col: operation.move.col,
+        value: operation.move.value,
+      });
       this.currentIndex++;
-      this.currentSudoku = this.history[this.currentIndex].clone();
     }
   }
 
@@ -86,7 +110,7 @@ export class Game {
    * @returns {boolean}
    */
   canRedo() {
-    return this.currentIndex < this.history.length - 1;
+    return this.currentIndex < this.history.length;
   }
 
   /**
@@ -103,9 +127,13 @@ export class Game {
    */
   toJSON() {
     return {
-      currentSudoku: this.currentSudoku.toJSON(),
-      // 记录完整的历史
-      history: this.history.map(sudoku => sudoku.toJSON()),
+      initialSudoku: this.initialSudoku.toJSON(),
+      // 记录可重放的历史操作，而不是整盘快照
+      history: this.history.map(operation => ({
+        type: operation.type,
+        move: { ...operation.move },
+        previousValue: operation.previousValue,
+      })),
       currentIndex: this.currentIndex,
     };
   }
@@ -134,30 +162,25 @@ export function createGame(options) {
  * @returns {Game}
  */
 export function createGameFromJSON(json) {
-  // 创建一个占位符 sudoku（会被覆盖）
-  const dummySudoku = new Sudoku([
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0],
-  ]);
-  const game = new Game({ sudoku: dummySudoku });
+  const game = new Game({ sudoku: new Sudoku(json.initialSudoku.initialGrid) });
 
-  // 恢复历史：从 JSON 重新构建每个历史状态的 Sudoku
-  game.history = json.history.map(sudokuJson => {
-    const sudoku = new Sudoku(sudokuJson.initialGrid);
-    sudoku.userGrid = sudokuJson.userGrid.map(row => [...row]);
-    return sudoku;
-  });
+  game.initialSudoku = new Sudoku(json.initialSudoku.initialGrid);
+  game.initialSudoku.userGrid = json.initialSudoku.userGrid.map(row => [...row]);
 
-  // 恢复当前状态
+  game.history = json.history.map(operation => ({
+    type: operation.type,
+    move: { ...operation.move },
+    previousValue: operation.previousValue,
+  }));
+
   game.currentIndex = json.currentIndex;
-  game.currentSudoku = game.history[game.currentIndex].clone();
+  game.currentSudoku = new Sudoku(json.initialSudoku.initialGrid);
+  game.currentSudoku.userGrid = json.initialSudoku.userGrid.map(row => [...row]);
+
+  for (let index = 0; index < game.currentIndex; index++) {
+    const operation = game.history[index];
+    game.currentSudoku.guess(operation.move);
+  }
 
   return game;
 }
