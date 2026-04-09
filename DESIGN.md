@@ -79,7 +79,7 @@ Store Adapter:
     ↓
 Store Adapter 的 derived store 自动更新：
   - grid = $gameInstance.getSudoku().getGrid()
-  - invalidCells = findInvalidCells($gameInstance.getSudoku())
+  - invalidCells = $gameInstance.getSudoku().validate().invalidCells
   - won = isWon($gameInstance.getSudoku())
     ↓
 Svelte 自动检测 $grid、$invalidCells、$won 变化
@@ -305,7 +305,7 @@ const grid = derived(gameInstance, $game =>
 在 HW1 中：
 1. **领域对象只在测试中使用**
    - Sudoku 和 Game 类被设计出来，但真实 UI 没有使用
-   - UI 仍然直接改 `userGrid` 二维数组
+  - UI 仍然直接改二维数组状态
 
 2. **UI 逻辑复杂，状态分散**
    - Undo/Redo 逻辑（如果有实现）散落在组件中
@@ -366,7 +366,7 @@ const grid = derived(gameInstance, $game =>
 核心结论：Svelte 不直接操作 Sudoku/Game，而是通过 gameStore 这个适配器把“命令”和“状态投影”连接起来。
 
 1. **领域对象只负责业务规则**
-  - `Sudoku` 负责棋盘状态与输入规则（如不可修改初始给定格、深拷贝等）
+  - `Sudoku` 负责棋盘状态与输入规则（如不可修改初始给定格、稀疏变更存储等）
   - `Game` 负责流程与历史（`guess/undo/redo/canUndo/canRedo`）
 
 2. **Store Adapter（`createGameStore`）负责把领域对象映射为可订阅状态**
@@ -380,7 +380,7 @@ const grid = derived(gameInstance, $game =>
   - `update` 触发 store 通知，`derived` 自动重算，组件自动刷新
 
 4. **为什么这比“直接改数组”稳定**
-  - 直接改 `userGrid[row][col]` 是对象内部突变，UI 可能感知不到
+  - 直接改对象/数组内部字段是内部突变，UI 可能感知不到
   - 通过 store 的 `update/set`，通知链是明确的：
     - 命令执行 -> 领域对象状态变化 -> store 通知 -> derived 重算 -> 组件重渲染
 
@@ -411,7 +411,7 @@ View 层**不直接依赖 `Sudoku`/`Game` 类**，而是统一依赖 `gameStore`
 3. **Keyboard：发输入命令**
   - 根据 `givenGrid` 判断当前格是否可编辑
   - 可编辑时调用 `gameStore.guess(row, col, value)`
-  - 不直接写 `Sudoku.userGrid`
+  - 不直接写 `Sudoku` 的内部字段（如 `userMoves`）
 
 4. **ActionBar：发流程命令**
   - 订阅 `canUndo/canRedo/grid`
@@ -440,7 +440,7 @@ View 层**不直接依赖 `Sudoku`/`Game` 类**，而是统一依赖 `gameStore`
 
 ```javascript
 // ❌ 不会更新 UI
-game.currentSudoku.userGrid[0][0] = 5;
+game.currentSudoku.userMoves.set(0, 5);
 
 // ✅ 会更新 UI
 gameInstance.set(game);  // 或 update()
