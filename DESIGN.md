@@ -9,6 +9,8 @@
 - ✅ 建立了 Store Adapter 层来连接领域对象与 Svelte UI
 - ✅ UI 现在通过领域对象来操作游戏状态，而不是直接改数组
 - ✅ Undo/Redo 由领域对象提供，完全集成到游戏流程
+- ✅ Sudoku 采用稀疏变更集保存用户输入，clone() 不再整盘深拷贝
+- ✅ Game 的 history 改为操作日志 + 反向操作，而不是整盘快照数组
 
 ---
 
@@ -43,7 +45,8 @@
 │  │   Game 类        │        │  Sudoku 类       │      │
 │  ├──────────────────┤        ├──────────────────┤      │
 │  │- currentSudoku   │        │- initialGrid     │      │
-│  │- history[]       │        │- userGrid        │      │
+│  │- initialSudoku   │        │- userMoves       │      │
+│  │- history[]       │        │                  │      │
 │  │- currentIndex    │        │                  │      │
 │  ├──────────────────┤        ├──────────────────┤      │
 │  │+ guess()         │        │+ getGrid()       │      │
@@ -94,8 +97,9 @@ Actions.svelte on:click={() => gameStore.undo()}
 gameInstance.update() 调用 Game.undo()
     ↓
 Game.undo():
+  - 取出当前操作的 previousValue
+  - 将该格恢复到 previousValue
   - currentIndex--
-  - currentSudoku = history[currentIndex].clone()
     ↓
 Store Adapter 的 derived store 更新
     ↓
@@ -111,18 +115,18 @@ UI 重新渲染
 **职责**：代表单个数独棋盘的状态
 
 **关键属性**：
-- `initialGrid` - 初始棋盘（防御性复制，只读）
-- `userGrid` - 用户输入的棋盘
+- `initialGrid` - 初始棋盘（防御性复制，只读，作为共享基底）
+- `userMoves` - 用户输入的稀疏变更集（只记录有变化的格子）
 
 **关键方法**：
 - `guess(move)` - 用户在指定位置输入数字
 - `getGrid()` - 返回当前棋盘的拷贝
-- `clone()` - **重要**：深拷贝当前状态（用于 Undo/Redo）
-- `toJSON()` / `toString()` - 序列化
+- `clone()` - **重要**：结构共享地复制快照，仅复制 `userMoves`
+- `toJSON()` / `toString()` - 序列化与外表化
 
 **设计要点**：
-- 防御性复制：初始网格被复制，不允许外部修改
-- clone() 使用深拷贝，确保历史中的快照真正独立
+- 防御性复制：初始网格被复制并冻结，不允许外部修改
+- 只把用户改动保存在稀疏集合中，避免 clone() 每次都复制完整 9x9 网格
 - 不允许修改初始值为非零的单元格（保护初始棋盘）
 
 ### 3.2 Game 类 (`src/domain/game.js`)
@@ -131,7 +135,8 @@ UI 重新渲染
 
 **关键属性**：
 - `currentSudoku` - 当前的 Sudoku 实例
-- `history[]` - 历史堆栈，每个元素是一个 Sudoku 快照
+- `initialSudoku` - 初始 Sudoku，用于序列化和恢复
+- `history[]` - 历史操作日志，每个元素记录一次 guess 及其可逆信息
 - `currentIndex` - 当前指向 history 中的位置
 
 **关键方法**：
@@ -145,29 +150,29 @@ UI 重新渲染
 ```javascript
 // 初始化
 game = new Game({ sudoku })
-history = [sudoku.clone()]  // 初始状态也在历史中
+history = []                // 只保存操作日志
 currentIndex = 0
 
 // 执行 guess
 game.guess({ row, col, value })
-  currentSudoku.guess()             // 修改当前棋盘
-  currentIndex++                    // 位置后移
-  history.push(currentSudoku.clone()) // 新快照入栈
+  currentSudoku.guess()              // 修改当前棋盘
+  history.push({ move, previousValue })
+  currentIndex++                     // 位置后移
 
 // Undo
 game.undo()
+  currentSudoku.guess({ value: previousValue })
   currentIndex--
-  currentSudoku = history[currentIndex].clone()
 
 // Redo
 game.redo()
+  currentSudoku.guess(move)
   currentIndex++
-  currentSudoku = history[currentIndex].clone()
 
 // 关键：新操作后清除 redo 栈
 game.guess() // 在 undo 后调用
-  if (currentIndex < history.length - 1) {
-    history = history.slice(0, currentIndex + 1)  // 删除 redo 历史
+  if (currentIndex < history.length) {
+    history = history.slice(0, currentIndex)      // 删除 redo 历史
   }
 ```
 
