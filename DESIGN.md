@@ -261,8 +261,8 @@ game.guess() // 在 undo 后调用
 
 **错误做法**（不起作用）：
 ```javascript
-userGrid[0][0] = 5;  // 改了内部值
-// ❌ Svelte 不知道 userGrid 变了，因为引用没变
+grid[0][0] = 5;  // 直接改普通数组元素
+// ❌ Svelte 不知道这次内部修改发生了，因为没有经过 store / 命令入口
 
 // 这会令 UI 不更新！
 ```
@@ -271,7 +271,7 @@ userGrid[0][0] = 5;  // 改了内部值
 ```javascript
 gameInstance.update($game => {
   $game.guess({ row: 0, col: 0, value: 5 });
-  return $game;  // 返回新对象或same object + notify
+  return $game;  // 通过领域对象写入稀疏变更，并通知 store 重新投影状态
 });
 // ✅ update() 通知 store 订阅者，自动更新 derived stores
 ```
@@ -280,19 +280,19 @@ gameInstance.update($game => {
 
 假设有这样的代码（**错误示例**）：
 ```javascript
-// ❌ 错误：derived 依赖对象属性而非对象本身
+// ❌ 错误：缓存了一次性的派生值，后续变更不会自动反映
 let gameRef = $gameInstance;
 let gridRef = gameRef.getSudoku().getGrid();
 
-// 当 gameInstance 变化时，gridRef 不更新
-// 因为对象属性的改变不触发响应
+// 当 gameInstance 内部状态变化时，gridRef 不会自动更新
+// 因为这里只保存了普通变量，而不是 derived / store 订阅结果
 ```
 
 **本项目的解决方案**：
 ```javascript
 // ✅ 正确：derived 直接调用方法获取值
 const grid = derived(gameInstance, $game => 
-  $game.getSudoku().getGrid()  // 每次 gameInstance 变化都重新调用
+  $game.getSudoku().getGrid()  // 每次 store 通知时都重新投影当前棋盘
 );
 ```
 
