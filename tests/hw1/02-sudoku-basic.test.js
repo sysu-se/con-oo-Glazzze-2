@@ -24,13 +24,15 @@ describe('HW1 sudoku basic behavior', () => {
     expect(grid[0][2]).toBe(4)
   })
 
-  it('rejects a conflicting guess that violates Sudoku rules', async () => {
+  it('allows conflicting guess and exposes conflict via validate()', async () => {
     const { createSudoku } = await loadDomainApi()
     const sudoku = createSudoku(makePuzzle())
 
-    // Row 0 already contains 5 at col 0, so placing 5 at (0,2) is invalid.
-    expect(() => sudoku.guess(makeMove({ row: 0, col: 2, value: 5 }))).toThrow()
-    expect(sudoku.getGrid()[0][2]).toBe(0)
+    // Row 0 already contains 5 at col 0, so placing 5 at (0,2) creates a conflict.
+    sudoku.guess(makeMove({ row: 0, col: 2, value: 5 }))
+
+    expect(sudoku.getGrid()[0][2]).toBe(5)
+    expect(sudoku.validate().valid).toBe(false)
   })
 
   it('getGrid returns a 9x9 numeric grid', async () => {

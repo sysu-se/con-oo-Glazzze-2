@@ -150,12 +150,6 @@ export class Sudoku {
     const key = this._cellKey(row, col);
     const currentValue = this.userMoves.has(key) ? this.userMoves.get(key) : 0;
 
-    if (normalizedValue !== 0 && this._hasConflictAt(row, col, normalizedValue)) {
-      throw new Error(
-        `Invalid guess: placing ${normalizedValue} at row=${row}, col=${col} violates Sudoku rules`,
-      );
-    }
-
     if (currentValue === normalizedValue) {
       return;
     }
@@ -280,38 +274,6 @@ export class Sudoku {
    */
   _cellKey(row, col) {
     return row * 9 + col;
-  }
-
-  /**
-   * 判断在指定位置放置 value 是否会造成行/列/宫冲突
-   * @private
-   */
-  _hasConflictAt(row, col, value) {
-    const grid = this.getGrid();
-
-    // 排除当前位置，再进行冲突检查
-    for (let index = 0; index < 9; index++) {
-      if (index !== col && grid[row][index] === value) {
-        return true;
-      }
-
-      if (index !== row && grid[index][col] === value) {
-        return true;
-      }
-    }
-
-    const boxRowStart = Math.floor(row / 3) * 3;
-    const boxColStart = Math.floor(col / 3) * 3;
-
-    for (let y = boxRowStart; y < boxRowStart + 3; y++) {
-      for (let x = boxColStart; x < boxColStart + 3; x++) {
-        if ((y !== row || x !== col) && grid[y][x] === value) {
-          return true;
-        }
-      }
-    }
-
-    return false;
   }
 
   /**

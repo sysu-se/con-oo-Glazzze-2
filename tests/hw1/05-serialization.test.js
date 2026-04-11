@@ -30,15 +30,18 @@ describe('HW1 serialization / deserialization', () => {
     expect(restored.getSudoku().getGrid()).toEqual(game.getSudoku().getGrid())
   })
 
-  it('rejects restoring an invalid Sudoku state from JSON', async () => {
+  it('restores conflicting Sudoku state and preserves validation signal', async () => {
     const { createSudokuFromJSON } = await loadDomainApi()
 
-    const invalid = {
+    const conflicting = {
       initialGrid: makePuzzle(),
       userMoves: [[2, 5]], // row=0 col=2, conflicts with existing 5 in row 0
     }
 
-    expect(() => createSudokuFromJSON(invalid)).toThrow()
+    const restored = createSudokuFromJSON(conflicting)
+
+    expect(restored.getGrid()[0][2]).toBe(5)
+    expect(restored.validate().valid).toBe(false)
   })
 
   it('rejects restoring a Game with out-of-bounds currentIndex', async () => {

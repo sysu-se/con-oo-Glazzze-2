@@ -51,7 +51,7 @@ describe('HW1 game undo / redo', () => {
     expect(game.getSudoku().getGrid()[2][0]).toBe(1)
   })
 
-  it('keeps redo history when a conflicting guess is rejected', async () => {
+  it('keeps redo history when an invalid guess payload is rejected', async () => {
     const { createGame, createSudoku } = await loadDomainApi()
     const game = createGame({ sudoku: createSudoku(makePuzzle()) })
 
@@ -61,8 +61,8 @@ describe('HW1 game undo / redo', () => {
 
     expect(game.canRedo()).toBe(true)
 
-    // row 0 already contains 5, this move should be rejected by Sudoku rules
-    expect(() => game.guess({ row: 0, col: 2, value: 5 })).toThrow()
+    // Invalid row should be rejected before affecting history.
+    expect(() => game.guess({ row: -1, col: 2, value: 5 })).toThrow()
     expect(game.canRedo()).toBe(true)
     expect(game.getSudoku().getGrid()[1][1]).toBe(0)
   })
