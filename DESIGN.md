@@ -549,80 +549,107 @@ View 层**不直接依赖 `Sudoku`/`Game` 类**，而是统一依赖 `gameStore`
 - 领域对象关注“操作是否合法、历史如何维护”
 - Store Adapter 负责两者之间的数据契约
 
-### Q1: 为什么修改对象内部字段后，界面不一定自动更新？
+### 6.3 Svelte 响应式机制：本项目必须理解的 5 个问题
 
-**答**：Svelte 的响应性是基于赋值操作。直接修改对象属性不会触发 store 的通知。
+#### Q1: 为什么修改对象内部字段后，界面不一定自动更新？
+
+**结论**：Svelte 不会自动观察任意对象深层字段；如果没有触发 `store.set/update` 或变量重新赋值，界面可能不更新。
+
+本项目依赖的正确机制是：
 
 ```javascript
-// ❌ 不会更新 UI
-game.currentSudoku.userMoves.set(0, 5);
-
-// ✅ 会更新 UI
-gameInstance.set(game);  // 或 update()
+gameInstance.update($game => {
+  $game.guess({ row, col, value });
+  return $game;
+});
 ```
 
-本项目中，通过 `gameInstance.update()` 来确保 store 通知到达。
+这段代码会触发 store 通知，随后 `derived(grid/invalidCells/canUndo...)` 重新计算，组件收到新值后刷新。
 
-### Q2: 为什么直接改二维数组元素，有时 Svelte 不会按预期刷新？
-
-**答**：二维数组的元素修改是内部突变，不会改变数组引用。Svelte 无法检测。
+错误做法示例（绕过通知链）：
 
 ```javascript
-// ❌ 引用没变，Svelte 无法检测
-let arr = [[1, 2], [3, 4]];
-arr[0][0] = 99;  // 引用仍是 arr，不会触发响应
+// ❌ 直接改内部结构，不经过 gameInstance.update/set
+game.currentSudoku.userMoves.set(0, 5);
+```
 
-// ✅ 必须改引用
-arr = arr.map((row, i) => 
-  i === 0 
-    ? [...row].map((v, j) => j === 0 ? 99 : v)
-    : row
+#### Q2: 为什么直接改二维数组元素，有时 Svelte 不会按预期刷新？
+
+**结论**：`arr[i][j] = x` 是内部突变，外层引用未变。对普通变量场景，这种写法通常不会触发响应更新。
+
+```javascript
+// ❌ 内部突变
+arr[0][0] = 99;
+
+// ✅ 产生新引用（普通变量场景）
+arr = arr.map((row, i) =>
+  i === 0 ? row.map((v, j) => (j === 0 ? 99 : v)) : row
 );
 ```
 
-### Q3: 为什么 store 可以被 `$store` 消费？
+本项目避免这个问题的方式是：UI 不直接改 `grid`，而是统一调用 `gameStore.guess(...)`，让领域对象改状态，再由 `derived` 重新投影。
 
-**答**：Svelte 编译器的语法糖。`$store` 等价于订阅 store 并自动取消订阅。
+#### Q3: 为什么 store 可以被 `$store` 消费？
+
+**结论**：`$store` 是 Svelte 编译期语法糖，等价于“自动订阅 + 自动取消订阅 + 取当前值”。
+
+因此在组件里可以直接写：
 
 ```svelte
-<!-- 这两种写法等价 -->
-{#each $grid as row}...{/each}
-
-<script>
-  let grid_value;
-  const unsubscribe = grid.subscribe(v => { grid_value = v; });
-  onDestroy(unsubscribe);
-</script>
-{#each grid_value as row}...{/each}
+{#each $gameStore.grid as row}
+  ...
+{/each}
 ```
 
-### Q4: 为什么 `$:` 有时会更新，有时不会更新？
+这也是本项目 UI 自动更新的基础之一：组件订阅的是 store，而不是手写轮询或手动同步。
 
-**答**：`$:` (reactive statement) 只在其**直接依赖**变化时重新运行。
+#### Q4: 为什么 `$:` 有时会更新，有时不会更新？
+
+**结论**：`$:` 只会在“语句中被直接引用的依赖”变化时重跑。
+
+本项目中的正确用法示例（来自组件）：
+
+```svelte
+$: keyboardDisabled = $gamePaused || $cursor.x === null || $cursor.y === null || isLockedCell;
+```
+
+上面语句直接依赖 `$gamePaused`、`$cursor`、`isLockedCell`，这些值变化就会重算。
+
+如果依赖没被直接引用，或者只改了某个未被追踪的深层字段，`$:` 可能不会按预期触发。
+
+#### Q5: 为什么“间接依赖”可能导致 reactive statement 不触发？
+
+**结论**：把关键值先缓存到普通变量，容易丢失响应式依赖关系。
 
 ```javascript
-// ✅ 会更新：$cursor 直接依赖
-$: isSelected = $cursor.x === x && $cursor.y === y;
-
-// ❌ 不一定更新：$grid 的属性改变不触发
-$: someValue = $grid[0][0];
-// 需要改为：
-$: someValue = $grid[0][0];  // 如果 $grid 本身被替换才触发
+// ❌ 间接依赖：只取了一次快照
+const gridRef = game.getSudoku().getGrid();
+$: rows = gridRef.length;
 ```
 
-### Q5: 为什么"间接依赖"可能导致 reactive statement 不触发？
+`gridRef` 本身不随 store 自动更新，导致后续语句不触发。
 
-**答**：Svelte 基于对顶层变量的追踪，不会追踪深层次属性。
+本项目的解决方式：让依赖绑定在 store/derived 上。
 
 ```javascript
-// ❌ 错误：只依赖 game 对象本身
-$: rows = game.getSudoku().getGrid().length;
-// 如果 getSudoku().getGrid() 返回新对象，但 game 没变，不会触发
-
-// ✅ 正确：让 grid store 处理
-$: rows = $grid.length;
-// $grid 作为 derived，会在 gameInstance 变化时自动更新
+const grid = derived(gameInstance, $game => $game.getSudoku().getGrid());
 ```
+
+组件层再消费 `$grid` 或 `$gameStore.grid`，即可保持依赖链完整。
+
+#### 本节小结：本方案依赖了哪些 Svelte 机制
+
+1. `writable`：持有 `Game` 运行时实例。
+2. `update/set`：触发状态变更通知。
+3. `derived`：把领域对象状态投影为 UI 可消费状态。
+4. `$store`：组件自动订阅并响应更新。
+5. `$:`：在组件内部做轻量派生计算。
+
+**因此 UI 会更新的根本原因**：
+命令调用进入 `gameStore` -> `gameInstance.update` 发出通知 -> `derived` 重算 -> 组件的 `$store` 值变化 -> Svelte 重新渲染。
+
+**如果错误地直接 mutate 对象**：
+你会绕过 `update/set` 通知链，导致 `derived` 不重算，界面出现“数据改了但不刷新”或“局部状态不同步”的问题。
 
 ---
 
