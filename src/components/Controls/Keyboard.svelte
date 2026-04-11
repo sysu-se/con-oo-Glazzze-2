@@ -26,6 +26,7 @@
 				}
 
 				// 调用 gameStore.guess() 而不是直接改 userGrid，满足⽤⼾在界⾯中进⾏输⼊时，必须调⽤Game / Sudoku接⼝的要求
+				//UI调用证据
 				gameStore.guess($cursor.y, $cursor.x, num);
 			}
 		}

@@ -232,6 +232,73 @@ game.guess() // 在 undo 后调用
 - `gameInstance` 的 update 会触发 derived 的重新计算
 - UI 订阅 derived store，自动刷新
 
+### 3.4 方案 A 的实现思路与代码结构拆分
+
+本项目采用 Store Adapter（`createGameStore`）作为 UI 与领域层之间的唯一桥梁。实现时遵循三条原则：
+
+1. **领域层只管规则，不直接面向 Svelte**
+   - `Sudoku` 管棋盘与输入合法性。
+   - `Game` 管历史、撤销、重做等流程。
+   - 领域对象不暴露 Svelte 语法，不直接依赖组件。
+
+2. **Adapter 只做“状态投影 + 命令转发”**
+   - 内部持有一个 `gameInstance = writable(game)`。
+   - 用 `derived(gameInstance, ...)` 把领域对象状态投影成 UI 可订阅状态。
+   - 把 UI 命令统一转发到 `Game`（例如 `guess/undo/redo`）。
+
+3. **组件层只读状态、只发命令**
+   - 组件不改领域对象内部字段。
+   - 组件不关心历史结构、校验细节，只关心显示与交互。
+
+#### 3.4.1 代码结构
+
+```text
+src/domain/
+  sudoku.js       // 棋盘规则、校验、序列化
+  game.js         // 游戏流程、history、undo/redo
+
+src/stores/
+  gameStore.js    // Store Adapter（桥接层）
+
+src/components/
+  ...             // 只消费 gameStore 的状态和命令
+```
+
+#### 3.4.2 状态拆分（State Decomposition）
+
+在 `createGameStore` 中，状态按“是否需要被 UI 订阅”拆分：
+
+- **核心局面状态**：`grid`、`givenGrid`
+- **规则派生状态**：`invalidCells`、`won`
+- **流程派生状态**：`canUndo`、`canRedo`
+
+这些状态全部由 `gameInstance` 派生，保证单一数据源（Single Source of Truth）。
+
+另外，`selectedCell` 没有放进 `gameStore`，而是继续使用独立的 `cursor` store，原因是：
+
+- 光标属于纯 UI 交互状态，不属于 `Game/Sudoku` 核心领域规则。
+- 独立后可减少领域层耦合，保持 `gameStore` 聚焦在游戏规则与流程状态。
+
+#### 3.4.3 命令拆分（Command Decomposition）
+
+命令按“是否改变领域对象状态”拆分：
+
+- **领域命令**：`guess`、`undo`、`redo`（直接转发到 `Game`）
+- **流程命令**：`newGame`、`startNew`、`startCustom`（负责创建/加载新局）
+- **辅助命令**：`applyHint`（在 Adapter 内组合 solver 与 `Game.guess`）
+
+统一命令入口的目的：
+
+- 所有状态变更都经过 `gameInstance.update/set`，保证 Svelte 可感知。
+- 组件调用语义一致，降低 UI 复杂度。
+- 后续增加日志、埋点、权限控制时，只需在 Adapter 层扩展。
+
+#### 3.4.4 为什么这种拆分适合本次作业要求
+
+- 满足“真实流程接入”：开局、输入、撤销重做都经过 `Game/Sudoku`。
+- 满足“响应式可消费”：UI 只订阅 Adapter 导出的状态。
+- 满足“可演进”：领域规则修改时，组件层改动最小。
+
 ---
 
 ## 四、Svelte 响应式机制解析

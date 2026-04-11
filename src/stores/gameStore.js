@@ -106,7 +106,7 @@ function findInvalidCells(sudoku) {
 }
 
 /**
- * 创建游戏 Store Adapter
+ * 创建游戏 Store Adapter（⾯向 Svelte 的适配层）
  * @param {Object} options
  * @param {number[][]} options.initialGrid - 初始棋盘
  * @returns {Object} - 包含响应式状态和命令的店铺对象
@@ -123,7 +123,7 @@ export function createGameStore(options = {}) {
     }
   }
   
-  // 创建初始的 Sudoku 和 Game
+  // 创建初始的 Sudoku 和 Game并持有
   const sudoku = createSudoku(initialGrid);
   const game = createGame({ sudoku });
   let solvedGrid = buildSolvedGrid(initialGrid);
@@ -131,6 +131,8 @@ export function createGameStore(options = {}) {
   // 内部可写 store：持有当前的 Game 实例（典型Svelte 3 风格）
   const gameInstance = writable(game);
   
+  //对外暴露可被 Svelte 消费的响应式状态
+
   // 响应式 store：当前棋盘网格
   // 每当 game 变化时，自动更新 grid
   //UI 的 grid 来自 Game -> Sudoku 的导出状态，满足UI 中看到的 grid 必须来自你的领域对象，或来自由你的领域对象导出的响应式视图状态的要求
@@ -165,6 +167,8 @@ export function createGameStore(options = {}) {
     $game.canRedo()
   );
 
+
+  //对外暴露 UI 可调用的方法（命令）
   /**
    * UI 命令：用户猜测
    * @param {number} row
