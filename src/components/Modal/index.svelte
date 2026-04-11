@@ -4,6 +4,8 @@
 	import { MODAL_NONE, MODAL_DURATION } from '@sudoku/constants';
 	import types from './Types';
 
+	export let gameStore;
+
 	const MODALS_DISABLED_OVERLAY = ['welcome', 'gameover'];
 
 	function handleOverlayClick() {
@@ -19,7 +21,7 @@
 
 		<div transition:scale={{duration: MODAL_DURATION}} class="modal-container">
 			<div class="modal-content">
-				<svelte:component this={types[$modal]} data={$modalData} hideModal={modal.hide} />
+				<svelte:component this={types[$modal]} data={$modalData} hideModal={modal.hide} {gameStore} />
 			</div>
 		</div>
 	</div>

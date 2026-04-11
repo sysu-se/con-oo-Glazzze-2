@@ -52,7 +52,7 @@
 	<Controls {gameStore} />
 </footer>
 
-<Modal />
+<Modal {gameStore} />
 
 <style global>
 	@import "./styles/global.css";

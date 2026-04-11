@@ -136,6 +136,8 @@ export class Game {
   toJSON() {
     return {
       initialSudoku: this.initialSudoku.toJSON(),
+      // 兼容旧消费方：同时暴露当前盘面
+      currentSudoku: this.currentSudoku.toJSON(),
       // 记录可重放的历史操作，而不是整盘快照
       history: this.history.map(operation => ({
         type: operation.type,
@@ -173,54 +175,113 @@ export function createGameFromJSON(json) {
   if (!json || typeof json !== 'object') {
     throw new Error('Invalid Game JSON payload');
   }
+
+  // 新格式：{ initialSudoku, history: operation[], currentIndex }
+  // 旧格式：{ currentSudoku, history: sudokuSnapshot[], currentIndex }
+  const isOperationHistory = Array.isArray(json.history) && json.history.every(op => op && typeof op === 'object' && op.type === 'guess');
+  const isSnapshotHistory = Array.isArray(json.history) && json.history.every(s => s && typeof s === 'object' && (Array.isArray(s.userGrid) || Array.isArray(s.userMoves)));
+
   if (!Array.isArray(json.history)) {
     throw new Error('Invalid Game JSON payload: history must be an array');
   }
-  if (!Number.isInteger(json.currentIndex) || json.currentIndex < 0 || json.currentIndex > json.history.length) {
-    throw new Error('Invalid Game JSON payload: currentIndex out of bounds');
+
+  if (isOperationHistory) {
+    if (!Number.isInteger(json.currentIndex) || json.currentIndex < 0 || json.currentIndex > json.history.length) {
+      throw new Error('Invalid Game JSON payload: currentIndex out of bounds');
+    }
+
+    const initialSudoku = createSudokuFromJSON(json.initialSudoku);
+    const game = new Game({ sudoku: initialSudoku.clone() });
+
+    game.initialSudoku = initialSudoku;
+
+    game.history = json.history.map(operation => {
+      if (!operation || typeof operation !== 'object') {
+        throw new Error('Invalid Game JSON payload: malformed history operation');
+      }
+      if (operation.type !== 'guess') {
+        throw new Error(`Invalid Game JSON payload: unsupported operation type ${operation.type}`);
+      }
+      if (!operation.move || typeof operation.move !== 'object') {
+        throw new Error('Invalid Game JSON payload: malformed move');
+      }
+
+      const { row, col, value } = operation.move;
+      if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row > 8 || col < 0 || col > 8) {
+        throw new Error('Invalid Game JSON payload: move position out of range');
+      }
+      if (!Number.isInteger(value) || value < 0 || value > 9) {
+        throw new Error('Invalid Game JSON payload: move value out of range');
+      }
+      if (!Number.isInteger(operation.previousValue) || operation.previousValue < 0 || operation.previousValue > 9) {
+        throw new Error('Invalid Game JSON payload: previousValue out of range');
+      }
+
+      return {
+        type: operation.type,
+        move: { ...operation.move },
+        previousValue: operation.previousValue,
+      };
+    });
+
+    game.currentIndex = json.currentIndex;
+    game.currentSudoku = initialSudoku.clone();
+
+    for (let index = 0; index < game.currentIndex; index++) {
+      const operation = game.history[index];
+      game.currentSudoku.guess(operation.move);
+    }
+
+    return game;
   }
 
-  const initialSudoku = createSudokuFromJSON(json.initialSudoku);
-  const game = new Game({ sudoku: initialSudoku.clone() });
-
-  game.initialSudoku = initialSudoku;
-
-  game.history = json.history.map(operation => {
-    if (!operation || typeof operation !== 'object') {
-      throw new Error('Invalid Game JSON payload: malformed history operation');
-    }
-    if (operation.type !== 'guess') {
-      throw new Error(`Invalid Game JSON payload: unsupported operation type ${operation.type}`);
-    }
-    if (!operation.move || typeof operation.move !== 'object') {
-      throw new Error('Invalid Game JSON payload: malformed move');
+  if (isSnapshotHistory) {
+    if (!Number.isInteger(json.currentIndex) || json.currentIndex < 0 || json.currentIndex >= json.history.length) {
+      throw new Error('Invalid legacy Game JSON payload: currentIndex out of bounds');
     }
 
-    const { row, col, value } = operation.move;
-    if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row > 8 || col < 0 || col > 8) {
-      throw new Error('Invalid Game JSON payload: move position out of range');
-    }
-    if (!Number.isInteger(value) || value < 0 || value > 9) {
-      throw new Error('Invalid Game JSON payload: move value out of range');
-    }
-    if (!Number.isInteger(operation.previousValue) || operation.previousValue < 0 || operation.previousValue > 9) {
-      throw new Error('Invalid Game JSON payload: previousValue out of range');
+    const snapshots = json.history.map(snapshot => createSudokuFromJSON(snapshot));
+    const initialSudoku = snapshots[0].clone();
+    const game = new Game({ sudoku: initialSudoku.clone() });
+    game.initialSudoku = initialSudoku;
+
+    // 将旧快照历史转换为可重放的操作历史
+    game.history = [];
+    for (let index = 1; index < snapshots.length; index++) {
+      const prev = snapshots[index - 1].getGrid();
+      const next = snapshots[index].getGrid();
+
+      let diff = null;
+      for (let row = 0; row < 9; row++) {
+        for (let col = 0; col < 9; col++) {
+          if (prev[row][col] !== next[row][col]) {
+            if (diff !== null) {
+              throw new Error('Invalid legacy Game JSON payload: snapshot step has multiple cell changes');
+            }
+            diff = { row, col, previousValue: prev[row][col], value: next[row][col] };
+          }
+        }
+      }
+
+      if (diff === null) {
+        throw new Error('Invalid legacy Game JSON payload: snapshot step has no changes');
+      }
+
+      game.history.push({
+        type: 'guess',
+        move: { row: diff.row, col: diff.col, value: diff.value },
+        previousValue: diff.previousValue,
+      });
     }
 
-    return {
-      type: operation.type,
-      move: { ...operation.move },
-      previousValue: operation.previousValue,
-    };
-  });
+    game.currentIndex = json.currentIndex;
+    game.currentSudoku = initialSudoku.clone();
+    for (let index = 0; index < game.currentIndex; index++) {
+      game.currentSudoku.guess(game.history[index].move);
+    }
 
-  game.currentIndex = json.currentIndex;
-  game.currentSudoku = initialSudoku.clone();
-
-  for (let index = 0; index < game.currentIndex; index++) {
-    const operation = game.history[index];
-    game.currentSudoku.guess(operation.move);
+    return game;
   }
 
-  return game;
+  throw new Error('Invalid Game JSON payload: unsupported history format');
 }

@@ -30,6 +30,14 @@ describe('HW1 serialization / deserialization', () => {
     expect(restored.getSudoku().getGrid()).toEqual(game.getSudoku().getGrid())
   })
 
+  it('includes currentSudoku in game JSON for compatibility', async () => {
+    const { createGame, createSudoku } = await loadDomainApi()
+    const game = createGame({ sudoku: createSudoku(makePuzzle()) })
+    const json = game.toJSON()
+
+    expect(json.currentSudoku).toBeDefined()
+  })
+
   it('restores conflicting Sudoku state and preserves validation signal', async () => {
     const { createSudokuFromJSON } = await loadDomainApi()
 
@@ -66,5 +74,31 @@ describe('HW1 serialization / deserialization', () => {
     }
 
     expect(() => createGameFromJSON(invalid)).toThrow()
+  })
+
+  it('restores legacy snapshot-based game JSON format', async () => {
+    const { createGameFromJSON } = await loadDomainApi()
+
+    const initialGrid = makePuzzle()
+    const step0 = {
+      initialGrid,
+      userGrid: initialGrid.map(row => [...row]),
+    }
+
+    const step1Grid = initialGrid.map(row => [...row])
+    step1Grid[0][2] = 4
+    const step1 = {
+      initialGrid,
+      userGrid: step1Grid,
+    }
+
+    const legacy = {
+      currentSudoku: step1,
+      history: [step0, step1],
+      currentIndex: 1,
+    }
+
+    const restored = createGameFromJSON(legacy)
+    expect(restored.getSudoku().getGrid()[0][2]).toBe(4)
   })
 })

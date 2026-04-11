@@ -1,5 +1,4 @@
 <script>
-	import { validateSencode } from '@sudoku/sencode';
 	import { modal } from '@sudoku/stores/modal';
 	import { slide, fade } from 'svelte/transition';
 	import { DIFFICULTIES, DROPDOWN_DURATION, DIFFICULTY_CUSTOM } from '@sudoku/constants';
@@ -45,16 +44,16 @@
 
 
 		modal.show('prompt', {
-			title: 'Enter Code',
-			text: 'Please enter the code of the Sudoku puzzle you want to play:',
+			title: 'Import Game',
+			text: 'Please enter a game code (serialized JSON) or a puzzle code (sencode):',
 			fontMono: true,
 			button: 'Start',
 			onHide: () => {},
 			callback: (value) => {
 				difficulty.setCustom();
-				gameStore.startCustom(value);
+				gameStore.importCode(value);
 			},
-			validate: validateSencode
+			validate: (value) => gameStore.canImportCode(value)
 		});
 	}
 

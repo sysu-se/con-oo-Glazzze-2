@@ -12,10 +12,11 @@
 
 
 import { writable, derived } from 'svelte/store';//典型Svelte 3 风格
-import { createGame, createSudoku } from '../domain/index.js';
+import { createGame, createSudoku, createGameFromJSON } from '../domain/index.js';
 import { generateSudoku } from '@sudoku/sudoku';
 import { solveSudoku } from '@sudoku/sudoku';
 import { decodeSencode } from '@sudoku/sencode';
+import { validateSencode } from '@sudoku/sencode';
 
 /**
  * 检查数独是否已赢（所有单元格都填满且合法）
@@ -233,6 +234,64 @@ export function createGameStore(options = {}) {
   }
 
   /**
+   * UI 命令：将当前游戏完整序列化为 JSON 字符串
+   * @returns {string}
+   */
+  function serialize() {
+    return JSON.stringify(getGame().toJSON());
+  }
+
+  /**
+   * 校验导入代码是否可被当前系统识别
+   * 支持：完整 JSON（包含历史）或 legacy sencode
+   * @param {string} code
+   * @returns {boolean}
+   */
+  function canImportCode(code) {
+    const text = (code || '').trim();
+    if (!text) return false;
+
+    if (validateSencode(text)) {
+      return true;
+    }
+
+    try {
+      const payload = JSON.parse(text);
+      createGameFromJSON(payload);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * UI 命令：从导入代码恢复游戏
+   * 支持：完整 JSON（优先）与 legacy sencode（兼容）
+   * @param {string} code
+   */
+  function importCode(code) {
+    const text = (code || '').trim();
+    if (!text) {
+      throw new Error('Import code cannot be empty.');
+    }
+
+    // 先尝试完整 JSON 恢复；失败后回退到 sencode。
+    try {
+      const payload = JSON.parse(text);
+      const restoredGame = createGameFromJSON(payload);
+      solvedGrid = buildSolvedGrid(restoredGame.getSudoku().getInitialGrid());
+      gameInstance.set(restoredGame);
+      return;
+    } catch (jsonError) {
+      if (validateSencode(text)) {
+        startCustom(text);
+        return;
+      }
+      throw new Error('Invalid import code: expected serialized game JSON or sencode.');
+    }
+  }
+
+  /**
    * UI 命令：在指定位置应用提示
    * @param {number|null} row
    * @param {number|null} col
@@ -294,6 +353,9 @@ export function createGameStore(options = {}) {
     newGame,
     startNew,
     startCustom,
+    serialize,
+    canImportCode,
+    importCode,
     applyHint,
     
     // === 内部访问 ===
