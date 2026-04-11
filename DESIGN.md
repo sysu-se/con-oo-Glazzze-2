@@ -410,24 +410,15 @@ const grid = derived(gameInstance, $game =>
 
 ### 5.3 针对 HW1 Review 的补充修复
 
-结合上一轮 HW1 review 指出的问题，本次又补了三类关键修复：
+| 问题 | 风险 | 修复 | 验证 |
+|------|------|------|------|
+| `Sudoku.guess` 可能接受冲突落子 | 领域对象进入业务非法状态（行/列/宫冲突） | 在 `guess` 中加入落子前冲突检查，冲突时抛错；同时补充 move 参数完整性与坐标/值域校验 | 新增冲突落子测试通过：`tests/hw1/02-sudoku-basic.test.js` |
+| `Sudoku` 构造阶段缺少严格入口校验 | 可以创建出结构非法或初始冲突的对象，污染后续流程 | 在构造函数中加入 9x9 结构校验、0-9 值域校验、初始盘面冲突校验 | 新增“非法 shape / 初始冲突应拒绝”测试通过：`tests/hw1/02-sudoku-basic.test.js` |
+| `createSudokuFromJSON` 可能绕过规则恢复对象 | 存档边界失去约束，反序列化对象不可信 | fromJSON 改为“先构造再通过 `sudoku.guess(...)` 回放”，并校验 payload 与 `userMoves` key 范围 | 新增“非法 Sudoku JSON 恢复失败”测试通过：`tests/hw1/05-serialization.test.js` |
+| `createGameFromJSON` 对 history/currentIndex 约束不足 | 可恢复出索引越界或畸形历史对象，Undo/Redo 行为不可信 | 增加 `history` 结构、`currentIndex` 边界、operation 类型与 move/previousValue 值域校验 | 新增“越界 currentIndex / 畸形 operation 应拒绝”测试通过：`tests/hw1/05-serialization.test.js` |
+| 空值语义对外不够统一（清空行为） | 调用方需要猜测内部表示，易出现约定歧义 | `guess` 支持 `number | null`，内部统一归一为 `0` 表示清空 | 现有序列化、Undo/Redo、基础行为测试全通过 |
 
-1. **Sudoku.guess 强制维护规则不变量**
-  - 新增“落子前冲突检查”（行/列/九宫格），非法落子直接抛错。
-  - 这样领域对象不会进入“看起来可撤销但业务非法”的状态。
-
-2. **反序列化不再绕过领域规则**
-  - `createSudokuFromJSON` 改为通过 `sudoku.guess(...)` 回放恢复，而不是直接写内部字段。
-  - 非法存档会在恢复时被拒绝，保证恢复出的对象仍满足业务约束。
-
-3. **空值语义统一**
-  - `guess` 接口支持 `number | null` 输入，内部统一归一到 `0` 表示清空。
-  - 降低了外部调用对内部存储细节的依赖。
-
-4. **新增回归测试覆盖上述修复**
-  - 新增“冲突落子应抛错”测试。
-  - 新增“非法 JSON 状态恢复应失败”测试。
-  - 当前测试总数已扩展并保持全通过。
+本轮修复后的回归结果：`npm run test` 全部通过（5 files / 21 tests）。
 
 ### 5.4 设计 Trade-offs
 

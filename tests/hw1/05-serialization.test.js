@@ -40,4 +40,28 @@ describe('HW1 serialization / deserialization', () => {
 
     expect(() => createSudokuFromJSON(invalid)).toThrow()
   })
+
+  it('rejects restoring a Game with out-of-bounds currentIndex', async () => {
+    const { createGameFromJSON } = await loadDomainApi()
+
+    const invalid = {
+      initialSudoku: { initialGrid: makePuzzle(), userMoves: [] },
+      history: [],
+      currentIndex: 1,
+    }
+
+    expect(() => createGameFromJSON(invalid)).toThrow()
+  })
+
+  it('rejects restoring a Game with malformed history operation', async () => {
+    const { createGameFromJSON } = await loadDomainApi()
+
+    const invalid = {
+      initialSudoku: { initialGrid: makePuzzle(), userMoves: [] },
+      history: [{ type: 'guess', move: { row: 0, col: 2, value: 4 }, previousValue: -1 }],
+      currentIndex: 0,
+    }
+
+    expect(() => createGameFromJSON(invalid)).toThrow()
+  })
 })

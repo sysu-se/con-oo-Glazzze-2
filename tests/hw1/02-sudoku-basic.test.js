@@ -59,4 +59,18 @@ describe('HW1 sudoku basic behavior', () => {
     const roundTrip = JSON.parse(JSON.stringify(json))
     expect(roundTrip).toBeDefined()
   })
+
+  it('rejects invalid initial grid shape at construction', async () => {
+    const { createSudoku } = await loadDomainApi()
+
+    expect(() => createSudoku([[1, 2, 3]])).toThrow()
+  })
+
+  it('rejects conflicting initial grid at construction', async () => {
+    const { createSudoku } = await loadDomainApi()
+    const puzzle = makePuzzle()
+    puzzle[0][2] = 5 // conflict with puzzle[0][0]
+
+    expect(() => createSudoku(puzzle)).toThrow()
+  })
 })

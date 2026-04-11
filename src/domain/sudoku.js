@@ -13,6 +13,9 @@ export class Sudoku {
    */
   //Sudoku状态持有：持有当前 grid / board 数据
   constructor(initialGrid) {
+    this._assertGridShapeAndRange(initialGrid, 'initialGrid');
+    this._assertNoConflicts(initialGrid, 'initialGrid');
+
     // 防御性复制：不允许外部修改初始棋盘
     this.initialGrid = this._freezeGrid(this._deepCopy(initialGrid));
 
@@ -122,11 +125,15 @@ export class Sudoku {
    */
   //提供guess() 接口：用户输入数字，修改 userGrid
   guess(move) {
+    if (!move || typeof move !== 'object') {
+      throw new Error('Invalid move: expected { row, col, value } object');
+    }
+
     const { row, col, value } = move;
     const normalizedValue = value === null ? 0 : value;
     
     // 验证参数
-    if (row < 0 || row > 8 || col < 0 || col > 8) {
+    if (!Number.isInteger(row) || !Number.isInteger(col) || row < 0 || row > 8 || col < 0 || col > 8) {
       throw new Error(`Invalid cell position: row=${row}, col=${col}`);
     }
     if (!Number.isInteger(normalizedValue) || normalizedValue < 0 || normalizedValue > 9) {
@@ -201,6 +208,58 @@ export class Sudoku {
    */
   _deepCopy(grid) {
     return grid.map(row => [...row]);
+  }
+
+  /**
+   * 校验棋盘结构和值域
+   * @private
+   */
+  _assertGridShapeAndRange(grid, label) {
+    if (!Array.isArray(grid) || grid.length !== 9) {
+      throw new Error(`Invalid ${label}: expected 9x9 grid`);
+    }
+
+    for (let row = 0; row < 9; row++) {
+      if (!Array.isArray(grid[row]) || grid[row].length !== 9) {
+        throw new Error(`Invalid ${label}: expected 9x9 grid`);
+      }
+
+      for (let col = 0; col < 9; col++) {
+        const value = grid[row][col];
+        if (!Number.isInteger(value) || value < 0 || value > 9) {
+          throw new Error(`Invalid ${label}: value out of range at row=${row}, col=${col}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * 校验棋盘是否满足基础数独约束（忽略 0）
+   * @private
+   */
+  _assertNoConflicts(grid, label) {
+    const used = new Set();
+
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const value = grid[row][col];
+        if (value === 0) {
+          continue;
+        }
+
+        const rowKey = `r${row}:${value}`;
+        const colKey = `c${col}:${value}`;
+        const boxKey = `b${Math.floor(row / 3)}${Math.floor(col / 3)}:${value}`;
+
+        if (used.has(rowKey) || used.has(colKey) || used.has(boxKey)) {
+          throw new Error(`Invalid ${label}: Sudoku conflicts detected`);
+        }
+
+        used.add(rowKey);
+        used.add(colKey);
+        used.add(boxKey);
+      }
+    }
   }
 
   /**
@@ -304,15 +363,25 @@ export function createSudoku(initialGrid) {
  * @returns {Sudoku}
  */
 export function createSudokuFromJSON(json) {
+  if (!json || typeof json !== 'object') {
+    throw new Error('Invalid Sudoku JSON payload');
+  }
+
   const sudoku = new Sudoku(json.initialGrid);
 
   if (Array.isArray(json.userMoves)) {
     for (const [key, value] of json.userMoves) {
+      if (!Number.isInteger(key) || key < 0 || key > 80) {
+        throw new Error(`Invalid userMoves key: ${key}`);
+      }
+
       const row = Math.floor(key / 9);
       const col = key % 9;
       sudoku.guess({ row, col, value });
     }
   } else if (Array.isArray(json.userGrid)) {
+    sudoku._assertGridShapeAndRange(json.userGrid, 'userGrid');
+
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
         const value = json.userGrid[row][col];
