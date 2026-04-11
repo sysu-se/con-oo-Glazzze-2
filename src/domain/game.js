@@ -130,6 +130,24 @@ export class Game {
   }
 
   /**
+   * 当前局面是否胜利：满盘且无冲突
+   * @returns {boolean}
+   */
+  isWon() {
+    const grid = this.currentSudoku.getGrid();
+
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        if (grid[row][col] === 0) {
+          return false;
+        }
+      }
+    }
+
+    return this.currentSudoku.validate().valid;
+  }
+
+  /**
    * 序列化为 JSON
    * @returns {Object}
    */

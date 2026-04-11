@@ -17,6 +17,7 @@ import { generateSudoku } from '@sudoku/sudoku';
 import { solveSudoku } from '@sudoku/sudoku';
 import { decodeSencode } from '@sudoku/sencode';
 import { validateSencode } from '@sudoku/sencode';
+import { pauseGame as pauseLegacyGame, resumeGame as resumeLegacyGame } from '@sudoku/game';
 
 /**
  * 检查数独是否已赢（所有单元格都填满且合法）
@@ -25,8 +26,7 @@ import { validateSencode } from '@sudoku/sencode';
  */
 function isWon(sudoku) {
   const grid = sudoku.getGrid();
-  
-  // 检查是否所有单元格都有数字
+
   for (let row = 0; row < 9; row++) {
     for (let col = 0; col < 9; col++) {
       if (grid[row][col] === 0) {
@@ -34,10 +34,8 @@ function isWon(sudoku) {
       }
     }
   }
-  
-  // TODO: 可以添加数独合法性检查
-  // 这里简化为只检查是否全部填满
-  return true;
+
+  return sudoku.validate().valid;
 }
 
 /**
@@ -131,6 +129,16 @@ export function createGameStore(options = {}) {
   
   // 内部可写 store：持有当前的 Game 实例（典型Svelte 3 风格）
   const gameInstance = writable(game);
+  const paused = writable(true);
+
+  function setPaused(nextPaused) {
+    paused.set(nextPaused);
+    if (nextPaused) {
+      pauseLegacyGame();
+    } else {
+      resumeLegacyGame();
+    }
+  }
   
   //对外暴露可被 Svelte 消费的响应式状态
 
@@ -153,8 +161,8 @@ export function createGameStore(options = {}) {
   });
   
   // 响应式 store：游戏是否已赢
-  const won = derived(gameInstance, $game => 
-    isWon($game.getSudoku())
+  const won = derived(gameInstance, $game =>
+    typeof $game.isWon === 'function' ? $game.isWon() : isWon($game.getSudoku())
   );
   
   //canUndo/canRedo 也是由领域对象派生，按钮状态会联动刷新
@@ -231,6 +239,22 @@ export function createGameStore(options = {}) {
   //创建或加载Sudoku
   function startCustom(sencode) {
     newGame(decodeSencode(sencode));
+  }
+
+  function pause() {
+    setPaused(true);
+  }
+
+  function resume() {
+    setPaused(false);
+  }
+
+  function togglePause() {
+    let currentPaused = true;
+    paused.subscribe(value => {
+      currentPaused = value;
+    })();
+    setPaused(!currentPaused);
   }
 
   /**
@@ -342,6 +366,7 @@ export function createGameStore(options = {}) {
     givenGrid: { subscribe: givenGrid.subscribe },
     invalidCells: { subscribe: invalidCells.subscribe },
     won: { subscribe: won.subscribe },
+    paused: { subscribe: paused.subscribe },
     canUndo: { subscribe: canUndo.subscribe },
     canRedo: { subscribe: canRedo.subscribe },
     
@@ -353,6 +378,9 @@ export function createGameStore(options = {}) {
     newGame,
     startNew,
     startCustom,
+    pause,
+    resume,
+    togglePause,
     serialize,
     canImportCode,
     importCode,

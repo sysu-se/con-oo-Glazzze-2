@@ -1,9 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { validateSencode } from '@sudoku/sencode';
-	import game from '@sudoku/game';
 	import { modal } from '@sudoku/stores/modal';
-	import { gameWon } from '@sudoku/stores/game';
 	import { createGameStore } from './stores/gameStore.js';
 	import Board from './components/Board/index.svelte';
 	import Controls from './components/Controls/index.svelte';
@@ -16,7 +14,7 @@
 	// 监听游戏赢的状态
 	gameStore.won.subscribe(won => {
 		if (won) {
-			game.pause();
+			gameStore.pause();
 			modal.show('gameover');
 		}
 	});
@@ -33,7 +31,7 @@
 			sencode = hash;
 		}
 
-		modal.show('welcome', { onHide: game.resume, sencode });
+		modal.show('welcome', { onHide: gameStore.resume, sencode });
 	});
 </script>
 

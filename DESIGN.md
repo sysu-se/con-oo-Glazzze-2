@@ -622,10 +622,10 @@ arr = arr.map((row, i) =>
 本项目中的正确用法示例（来自组件）：
 
 ```svelte
-$: keyboardDisabled = $gamePaused || $cursor.x === null || $cursor.y === null || isLockedCell;
+$: keyboardDisabled = $pausedStore || $cursor.x === null || $cursor.y === null || isLockedCell;
 ```
 
-上面语句直接依赖 `$gamePaused`、`$cursor`、`isLockedCell`，这些值变化就会重算。
+上面语句直接依赖 `$pausedStore`、`$cursor`、`isLockedCell`，这些值变化就会重算。
 
 如果依赖没被直接引用，或者只改了某个未被追踪的深层字段，`$:` 可能不会按预期触发。
 
@@ -727,8 +727,8 @@ gameStore.newGame(initialGrid);
 
 ## 九、未来改进方向
 
-1. **完整迁移**：将旧的 store（如 `@sudoku/stores/grid` 等）完全替换
-2. **Hint 功能**：通过 gameStore 提供，使用 solver 库
+1. **计时器内聚**：当前 pause/resume 入口已统一到 `gameStore`，下一步可将计时器状态也逐步内聚到适配层
+2. **Hint 功能增强**：进一步抽象 Hint 策略，支持更多提示等级
 3. **持久化**：Store Adapter 支持 localStorage 保存进度
 4. **网络同步**：用于多人实时同步
 5. **Svelte 5 迁移**：使用 runes 和 reactive classes 进一步简化
@@ -737,14 +737,14 @@ gameStore.newGame(initialGrid);
 
 ## 十、项目测试
 
-所有 HW1 的 15 个测试用例均通过 ✅
+所有 HW1 的 27 个测试用例均通过 ✅
 
 ```
 ✓ tests/hw1/01-contract.test.js (3 tests)
-✓ tests/hw1/02-sudoku-basic.test.js (5 tests)
+✓ tests/hw1/02-sudoku-basic.test.js (8 tests)
 ✓ tests/hw1/03-clone.test.js (2 tests)
-✓ tests/hw1/04-game-undo-redo.test.js (3 tests)
-✓ tests/hw1/05-serialization.test.js (2 tests)
+✓ tests/hw1/04-game-undo-redo.test.js (7 tests)
+✓ tests/hw1/05-serialization.test.js (7 tests)
 ```
 
 ---
@@ -757,5 +757,6 @@ gameStore.newGame(initialGrid);
 2. **Undo/Redo 的完整集成**
 3. **代码的可测试性和可维护性**
 4. **响应式更新的正确性**
+5. **旧入口统一到 gameStore（包括 pause/resume 与导入导出入口）**
 
 这为后续 Svelte 5 迁移、功能扩展等奠定了坚实基础。

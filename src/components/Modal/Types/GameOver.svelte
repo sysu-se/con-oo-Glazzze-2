@@ -1,10 +1,11 @@
 <script>
 	import { DIFFICULTIES, DIFFICULTY_CUSTOM, GAME_OVER_CELEBRATIONS } from '@sudoku/constants';
-	import { resumeGame } from '@sudoku/game';
 	import { modal } from '@sudoku/stores/modal';
 	import { timer } from '@sudoku/stores/timer';
 	import { difficulty } from '@sudoku/stores/difficulty';
 	import { usedHints } from '@sudoku/stores/hints';
+
+	export let gameStore;
 
 	const gameOverCelebration = GAME_OVER_CELEBRATIONS[Math.floor(Math.random() * GAME_OVER_CELEBRATIONS.length)];
 
@@ -13,7 +14,7 @@
 	}
 
 	function handleNewGame() {
-		modal.show('welcome', { onHide: resumeGame });
+		modal.show('welcome', { onHide: gameStore.resume });
 	}
 </script>
 

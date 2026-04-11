@@ -1,6 +1,5 @@
 <script>
 	import { BOX_SIZE } from '@sudoku/constants';
-	import { gamePaused } from '@sudoku/stores/game';
 	import { settings } from '@sudoku/stores/settings';
 	import { cursor } from '@sudoku/stores/cursor';
 	import { candidates } from '@sudoku/stores/candidates';
@@ -13,6 +12,7 @@
 	$: gridStore = gameStore.grid;
 	$: givenGridStore = gameStore.givenGrid;
 	$: invalidCellsStore = gameStore.invalidCells;
+	$: pausedStore = gameStore.paused;
 
 	function isSelected(cursorStore, x, y) {
 		return cursorStore.x === x && cursorStore.y === y;
@@ -42,7 +42,7 @@
 	</div>
 	<div class="board-padding absolute inset-0 flex justify-center">
 
-		<div class="bg-white shadow-2xl rounded-xl overflow-hidden w-full h-full max-w-xl grid" class:bg-gray-200={$gamePaused}>
+		<div class="bg-white shadow-2xl rounded-xl overflow-hidden w-full h-full max-w-xl grid" class:bg-gray-200={$pausedStore}>
 
 			{#each $gridStore as row, y}
 				{#each row as value, x}
@@ -50,7 +50,7 @@
 					      cellY={y + 1}
 					      cellX={x + 1}
 					      candidates={$candidates[x + ',' + y]}
-					      disabled={$gamePaused}
+					      disabled={$pausedStore}
 					      selected={isSelected($cursor, x, y)}
 					      userNumber={$givenGridStore[y][x] === 0}
 					      sameArea={$settings.highlightCells && !isSelected($cursor, x, y) && isSameArea($cursor, x, y)}

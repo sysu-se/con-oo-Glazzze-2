@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { loadDomainApi, makePuzzle } from './helpers/domain-api.js'
 
 describe('HW1 game undo / redo', () => {
+  const solvedGrid = [
+    [5, 3, 4, 6, 7, 8, 9, 1, 2],
+    [6, 7, 2, 1, 9, 5, 3, 4, 8],
+    [1, 9, 8, 3, 4, 2, 5, 6, 7],
+    [8, 5, 9, 7, 6, 1, 4, 2, 3],
+    [4, 2, 6, 8, 5, 3, 7, 9, 1],
+    [7, 1, 3, 9, 2, 4, 8, 5, 6],
+    [9, 6, 1, 5, 3, 7, 2, 8, 4],
+    [2, 8, 7, 4, 1, 9, 6, 3, 5],
+    [3, 4, 5, 2, 8, 6, 1, 7, 9],
+  ]
+
   it('supports a basic guess -> undo -> redo flow', async () => {
     const { createGame, createSudoku } = await loadDomainApi()
     const game = createGame({ sudoku: createSudoku(makePuzzle()) })
@@ -80,5 +92,31 @@ describe('HW1 game undo / redo', () => {
     // Current value is already 0 after undo, so this is a no-op.
     game.guess({ row: 1, col: 1, value: 0 })
     expect(game.canRedo()).toBe(true)
+  })
+
+  it('isWon returns true only when puzzle is full and valid', async () => {
+    const { createGame, createSudoku } = await loadDomainApi()
+    const almostSolved = solvedGrid.map(row => [...row])
+    almostSolved[0][0] = 0
+
+    const game = createGame({ sudoku: createSudoku(almostSolved) })
+    expect(game.isWon()).toBe(false)
+
+    game.guess({ row: 0, col: 0, value: 5 })
+    expect(game.isWon()).toBe(true)
+  })
+
+  it('isWon returns false for a full but conflicting board', async () => {
+    const { createGame, createSudoku } = await loadDomainApi()
+    const conflictReady = solvedGrid.map(row => [...row])
+    conflictReady[0][0] = 0
+    conflictReady[0][1] = 0
+
+    const game = createGame({ sudoku: createSudoku(conflictReady) })
+    game.guess({ row: 0, col: 0, value: 1 })
+    game.guess({ row: 0, col: 1, value: 1 })
+
+    expect(game.getSudoku().validate().valid).toBe(false)
+    expect(game.isWon()).toBe(false)
   })
 })

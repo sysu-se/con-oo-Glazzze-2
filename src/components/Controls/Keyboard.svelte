@@ -2,15 +2,15 @@
 	import { cursor } from '@sudoku/stores/cursor';
 	import { notes } from '@sudoku/stores/notes';
 	import { candidates } from '@sudoku/stores/candidates';
-	import { gamePaused } from '@sudoku/stores/game';
 	
 	// 接收 gameStore 作为 prop
 	export let gameStore;
 
 	//典型Svelte 3 风格
 	$: givenGridStore = gameStore.givenGrid;
+	$: pausedStore = gameStore.paused;
 	$: isLockedCell = $cursor.x !== null && $cursor.y !== null && $givenGridStore[$cursor.y]?.[$cursor.x] !== 0;
-	$: keyboardDisabled = $gamePaused || $cursor.x === null || $cursor.y === null || isLockedCell;
+	$: keyboardDisabled = $pausedStore || $cursor.x === null || $cursor.y === null || isLockedCell;
 
 	function handleKeyButton(num) {
 		if (!keyboardDisabled) {

@@ -6,7 +6,7 @@
 </script>
 
 <div class="action-bar space-y-3 xs:space-y-0">
-	<Timer />
+	<Timer {gameStore} />
 
 	<Actions {gameStore} />
 </div>
