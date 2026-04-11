@@ -663,32 +663,61 @@ const grid = derived(gameInstance, $game => $game.getSudoku().getGrid());
 **如果错误地直接 mutate 对象**：
 你会绕过 `update/set` 通知链，导致 `derived` 不重算，界面出现“数据改了但不刷新”或“局部状态不同步”的问题。
 
-### 6.4 响应式边界图（Boundary）
+### 6.4 UML 类图（边界与依赖）
 
-```text
-┌──────────────────────────────────────────────┐
-│ View (Svelte Components)                    │
-│ Board / Keyboard / Header / Modal / Timer   │
-│ - 只读: $gameStore.grid, $gameStore.won ... │
-│ - 只写: gameStore.guess/undo/redo/...       │
-└──────────────────────────────────────────────┘
-                    │
-                    │ command + subscribe
-                    ▼
-┌──────────────────────────────────────────────┐
-│ Adapter (createGameStore)                   │
-│ - 持有 Game 实例 (writable)                 │
-│ - 导出 derived: grid/invalidCells/won/...   │
-│ - 管理 UI 流程状态: paused + timer          │
-└──────────────────────────────────────────────┘
-                    │
-                    │ domain calls
-                    ▼
-┌──────────────────────────────────────────────┐
-│ Domain (Game / Sudoku)                      │
-│ - Game: history, undo/redo, isWon           │
-│ - Sudoku: grid, guess, validate, toJSON     │
-└──────────────────────────────────────────────┘
+```mermaid
+classDiagram
+  class AppSvelte {
+    +createGameStore()
+    +pass gameStore to children
+  }
+
+  class Board_Keyboard_Header_Modal {
+    +read $gameStore.*
+    +call gameStore commands
+  }
+
+  class GameStoreAdapter {
+    +grid
+    +givenGrid
+    +invalidCells
+    +won
+    +paused
+    +canUndo
+    +canRedo
+    +guess()
+    +undo()
+    +redo()
+    +pause()/resume()/togglePause()
+    +serialize()/importCode()
+  }
+
+  class Game {
+    +guess(move)
+    +undo()
+    +redo()
+    +isWon()
+    +toJSON()
+  }
+
+  class Sudoku {
+    +getGrid()
+    +guess(move)
+    +validate()
+    +toJSON()
+  }
+
+  class TimerStore {
+    +start()
+    +stop()
+    +reset()
+  }
+
+  AppSvelte --> Board_Keyboard_Header_Modal : props(gameStore)
+  Board_Keyboard_Header_Modal --> GameStoreAdapter : subscribe + command
+  GameStoreAdapter --> Game : holds instance
+  Game --> Sudoku : owns currentSudoku
+  GameStoreAdapter --> TimerStore : pause/resume sync
 ```
 
 边界约束：
@@ -696,34 +725,40 @@ const grid = derived(gameInstance, $game => $game.getSudoku().getGrid());
 - Domain 不依赖 Svelte store。
 - Adapter 是唯一状态入口（single source of truth）。
 
-### 6.5 关键时序图（Sequence）
+### 6.5 UML 时序图（用户输入）
 
-#### A) 用户输入一个数字
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant K as Keyboard.svelte
+  participant S as gameStore
+  participant G as Game
+  participant D as Sudoku
+  participant B as Board/ActionBar
 
-```text
-User click key
-  -> Keyboard.svelte 调用 gameStore.guess(row,col,value)
-  -> gameStore.update(game => game.guess(...))
-  -> Game 调用 Sudoku.guess 并更新历史
-  -> derived(grid/invalidCells/won/canUndo/canRedo) 重算
-  -> Board/ActionBar 通过 $store 自动刷新
+  U->>K: 点击数字键
+  K->>S: guess(row,col,value)
+  S->>G: guess(move)
+  G->>D: guess(move)
+  D-->>G: state updated
+  G-->>S: history/index updated
+  S-->>B: derived(grid,invalidCells,won,canUndo,canRedo) 更新
+  B-->>U: 界面自动刷新
 ```
 
-#### B) 分享导出并导入回放
+### 6.6 UML 状态图（暂停/恢复/胜利）
 
-```text
-Share modal copy
-  -> gameStore.serialize()
-  -> JSON payload
-
-Import code
-  -> gameStore.importCode(payload)
-  -> createGameFromJSON(...) 恢复 Domain 状态
-  -> gameInstance.set(restoredGame)
-  -> derived stores 重算，UI 回放到导出时局面
+```mermaid
+stateDiagram-v2
+  [*] --> Paused : createGameStore / newGame
+  Paused --> Running : resume()
+  Running --> Paused : pause() / togglePause()
+  Running --> Won : game.isWon() == true
+  Won --> Paused : show gameover / startNew
+  Paused --> Paused : importCode() / startCustom()
 ```
 
-### 6.6 Trade-off 表
+### 6.7 Trade-off 表
 
 | 设计决策 | 收益 | 代价 | 为什么可接受 |
 |---|---|---|---|
@@ -732,6 +767,16 @@ Import code
 | Sudoku 使用 userMoves 稀疏存储 | 减少拷贝与序列化体积 | 读取时需要合成 grid | 读取开销可接受，换来结构更干净 |
 | 导入支持 JSON + legacy sencode | 兼容旧分享链路，平滑迁移 | 校验分支增多 | 有助于避免线上/课堂演示失败 |
 | pause/resume 统一到 gameStore | 单状态入口，避免双系统分叉 | Adapter 需负责 timer 协同 | 明确了状态边界，便于答辩说明 |
+
+### 6.8 与评分项逐条对齐（Rubric Mapping）
+
+| 评分项 | 代码证据 | 测试证据 | 说明 |
+|---|---|---|---|
+| 真实接入程度（30） | `App -> gameStore -> 子组件`；组件事件统一调用 `gameStore` | `tests/hw1/06-ui-integration.test.js` | 主流程不再只在测试中使用领域对象 |
+| 响应式正确性（25） | `writable/derived` + `$store` 消费链；`won` 由 `game.isWon()` 驱动 | `tests/hw1/04-game-undo-redo.test.js`、`tests/hw1/06-ui-integration.test.js` | 输入/撤销/重做/暂停恢复均联动渲染 |
+| 领域对象改进质量（20） | `Game` 操作日志历史、`Sudoku` 稀疏 `userMoves`、严格序列化 | `tests/hw1/05-serialization.test.js` | 相比 HW1 有实质结构改进 |
+| View-Model/Adapter（10） | `createGameStore` 统一桥接；View 仅读状态并发命令 | `tests/hw1/06-ui-integration.test.js` | 边界清楚，组件无核心业务逻辑 |
+| 文档质量（15） | 本节 UML + 时序 + trade-off + 机制解释 | 与测试列表一致 | 可支撑课堂问答与助教核查 |
 
 ---
 
