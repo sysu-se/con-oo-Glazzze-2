@@ -15,94 +15,8 @@ import { writable, derived } from 'svelte/store';//典型Svelte 3 风格
 import { createGame, createSudoku, createGameFromJSON } from '../domain/index.js';
 import { generateSudoku } from '@sudoku/sudoku';
 import { solveSudoku } from '@sudoku/sudoku';
-import { decodeSencode } from '@sudoku/sencode';
-import { validateSencode } from '@sudoku/sencode';
-import { pauseGame as pauseLegacyGame, resumeGame as resumeLegacyGame } from '@sudoku/game';
-
-/**
- * 检查数独是否已赢（所有单元格都填满且合法）
- * @param {Sudoku} sudoku
- * @returns {boolean}
- */
-function isWon(sudoku) {
-  const grid = sudoku.getGrid();
-
-  for (let row = 0; row < 9; row++) {
-    for (let col = 0; col < 9; col++) {
-      if (grid[row][col] === 0) {
-        return false;
-      }
-    }
-  }
-
-  return sudoku.validate().valid;
-}
-
-/**
- * 找到无效的单元格（与其他单元格冲突的位置）
- * 无效指：同行、同列、同宫有重复数字
- * @param {Sudoku} sudoku
- * @returns {Set} - 包含无效单元格的 "row,col" 字符串
- */
-function findInvalidCells(sudoku) {
-  const grid = sudoku.getGrid();
-  const invalid = new Set();
-  
-  // 检查行冲突
-  for (let row = 0; row < 9; row++) {
-    const seen = new Map();
-    for (let col = 0; col < 9; col++) {
-      const value = grid[row][col];
-      if (value !== 0) {
-        if (seen.has(value)) {
-          invalid.add(`${row},${col}`);
-          invalid.add(`${row},${seen.get(value)}`);
-        } else {
-          seen.set(value, col);
-        }
-      }
-    }
-  }
-  
-  // 检查列冲突
-  for (let col = 0; col < 9; col++) {
-    const seen = new Map();
-    for (let row = 0; row < 9; row++) {
-      const value = grid[row][col];
-      if (value !== 0) {
-        if (seen.has(value)) {
-          invalid.add(`${row},${col}`);
-          invalid.add(`${seen.get(value)},${col}`);
-        } else {
-          seen.set(value, row);
-        }
-      }
-    }
-  }
-  
-  // 检查宫（3x3 box）冲突
-  for (let boxRow = 0; boxRow < 3; boxRow++) {
-    for (let boxCol = 0; boxCol < 3; boxCol++) {
-      const seen = new Map();
-      for (let row = boxRow * 3; row < boxRow * 3 + 3; row++) {
-        for (let col = boxCol * 3; col < boxCol * 3 + 3; col++) {
-          const value = grid[row][col];
-          if (value !== 0) {
-            const key = `${row},${col}`;
-            if (seen.has(value)) {
-              invalid.add(key);
-              invalid.add(seen.get(value));
-            } else {
-              seen.set(value, key);
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  return invalid;
-}
+import { decodeSencode, validateSencode } from '@sudoku/sencode';
+import { timer } from '@sudoku/stores/timer';
 
 /**
  * 创建游戏 Store Adapter（⾯向 Svelte 的适配层）
@@ -130,13 +44,17 @@ export function createGameStore(options = {}) {
   // 内部可写 store：持有当前的 Game 实例（典型Svelte 3 风格）
   const gameInstance = writable(game);
   const paused = writable(true);
+  let pausedValue = true;
+  paused.subscribe(value => {
+    pausedValue = value;
+  });
 
   function setPaused(nextPaused) {
     paused.set(nextPaused);
     if (nextPaused) {
-      pauseLegacyGame();
+      timer.stop();
     } else {
-      resumeLegacyGame();
+      timer.start();
     }
   }
   
@@ -161,9 +79,7 @@ export function createGameStore(options = {}) {
   });
   
   // 响应式 store：游戏是否已赢
-  const won = derived(gameInstance, $game =>
-    typeof $game.isWon === 'function' ? $game.isWon() : isWon($game.getSudoku())
-  );
+  const won = derived(gameInstance, $game => $game.isWon());
   
   //canUndo/canRedo 也是由领域对象派生，按钮状态会联动刷新
   // 响应式 store：是否可以撤销
@@ -222,6 +138,8 @@ export function createGameStore(options = {}) {
     const newSudoku = createSudoku(newInitialGrid);
     const newGame = createGame({ sudoku: newSudoku });
     gameInstance.set(newGame);
+    timer.reset();
+    setPaused(true);
   }
 
   /**
@@ -250,11 +168,7 @@ export function createGameStore(options = {}) {
   }
 
   function togglePause() {
-    let currentPaused = true;
-    paused.subscribe(value => {
-      currentPaused = value;
-    })();
-    setPaused(!currentPaused);
+    setPaused(!pausedValue);
   }
 
   /**

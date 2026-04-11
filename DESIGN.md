@@ -663,6 +663,76 @@ const grid = derived(gameInstance, $game => $game.getSudoku().getGrid());
 **如果错误地直接 mutate 对象**：
 你会绕过 `update/set` 通知链，导致 `derived` 不重算，界面出现“数据改了但不刷新”或“局部状态不同步”的问题。
 
+### 6.4 响应式边界图（Boundary）
+
+```text
+┌──────────────────────────────────────────────┐
+│ View (Svelte Components)                    │
+│ Board / Keyboard / Header / Modal / Timer   │
+│ - 只读: $gameStore.grid, $gameStore.won ... │
+│ - 只写: gameStore.guess/undo/redo/...       │
+└──────────────────────────────────────────────┘
+                    │
+                    │ command + subscribe
+                    ▼
+┌──────────────────────────────────────────────┐
+│ Adapter (createGameStore)                   │
+│ - 持有 Game 实例 (writable)                 │
+│ - 导出 derived: grid/invalidCells/won/...   │
+│ - 管理 UI 流程状态: paused + timer          │
+└──────────────────────────────────────────────┘
+                    │
+                    │ domain calls
+                    ▼
+┌──────────────────────────────────────────────┐
+│ Domain (Game / Sudoku)                      │
+│ - Game: history, undo/redo, isWon           │
+│ - Sudoku: grid, guess, validate, toJSON     │
+└──────────────────────────────────────────────┘
+```
+
+边界约束：
+- View 不直接读写 Domain 内部字段。
+- Domain 不依赖 Svelte store。
+- Adapter 是唯一状态入口（single source of truth）。
+
+### 6.5 关键时序图（Sequence）
+
+#### A) 用户输入一个数字
+
+```text
+User click key
+  -> Keyboard.svelte 调用 gameStore.guess(row,col,value)
+  -> gameStore.update(game => game.guess(...))
+  -> Game 调用 Sudoku.guess 并更新历史
+  -> derived(grid/invalidCells/won/canUndo/canRedo) 重算
+  -> Board/ActionBar 通过 $store 自动刷新
+```
+
+#### B) 分享导出并导入回放
+
+```text
+Share modal copy
+  -> gameStore.serialize()
+  -> JSON payload
+
+Import code
+  -> gameStore.importCode(payload)
+  -> createGameFromJSON(...) 恢复 Domain 状态
+  -> gameInstance.set(restoredGame)
+  -> derived stores 重算，UI 回放到导出时局面
+```
+
+### 6.6 Trade-off 表
+
+| 设计决策 | 收益 | 代价 | 为什么可接受 |
+|---|---|---|---|
+| 使用 Store Adapter 而非组件直连 Domain | 响应式稳定、边界清晰、便于测试 | 多一层转发代码 | 作业重点就是“真实接入 + 响应式正确性” |
+| Game 使用 operation history 而非整盘快照 | 内存更省、语义更清晰、redo 可控 | 反序列化与回放逻辑更复杂 | 复杂度集中在 Domain，UI 反而更简单 |
+| Sudoku 使用 userMoves 稀疏存储 | 减少拷贝与序列化体积 | 读取时需要合成 grid | 读取开销可接受，换来结构更干净 |
+| 导入支持 JSON + legacy sencode | 兼容旧分享链路，平滑迁移 | 校验分支增多 | 有助于避免线上/课堂演示失败 |
+| pause/resume 统一到 gameStore | 单状态入口，避免双系统分叉 | Adapter 需负责 timer 协同 | 明确了状态边界，便于答辩说明 |
+
 ---
 
 ## 七、关键改动列表
@@ -737,14 +807,15 @@ gameStore.newGame(initialGrid);
 
 ## 十、项目测试
 
-所有 HW1 的 27 个测试用例均通过 ✅
+所有 HW1 的 30 个测试用例均通过 ✅
 
 ```
 ✓ tests/hw1/01-contract.test.js (3 tests)
 ✓ tests/hw1/02-sudoku-basic.test.js (8 tests)
 ✓ tests/hw1/03-clone.test.js (2 tests)
-✓ tests/hw1/04-game-undo-redo.test.js (7 tests)
+✓ tests/hw1/04-game-undo-redo.test.js (8 tests)
 ✓ tests/hw1/05-serialization.test.js (7 tests)
+✓ tests/hw1/06-ui-integration.test.js (2 tests)
 ```
 
 ---

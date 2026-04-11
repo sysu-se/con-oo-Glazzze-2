@@ -119,4 +119,21 @@ describe('HW1 game undo / redo', () => {
     expect(game.getSudoku().validate().valid).toBe(false)
     expect(game.isWon()).toBe(false)
   })
+
+  it('isWon updates correctly across undo and redo near solved state', async () => {
+    const { createGame, createSudoku } = await loadDomainApi()
+    const almostSolved = solvedGrid.map(row => [...row])
+    almostSolved[0][0] = 0
+
+    const game = createGame({ sudoku: createSudoku(almostSolved) })
+
+    game.guess({ row: 0, col: 0, value: 5 })
+    expect(game.isWon()).toBe(true)
+
+    game.undo()
+    expect(game.isWon()).toBe(false)
+
+    game.redo()
+    expect(game.isWon()).toBe(true)
+  })
 })
