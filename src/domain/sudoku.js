@@ -118,17 +118,18 @@ export class Sudoku {
    * @param {Object} move - { row, col, value }
    * @param {number} move.row - 行号 (0-8)
    * @param {number} move.col - 列号 (0-8)
-   * @param {number} move.value - 输入值 (0-9, 0 表示清空)
+   * @param {number|null} move.value - 输入值 (1-9, null/0 表示清空)
    */
   //提供guess() 接口：用户输入数字，修改 userGrid
   guess(move) {
     const { row, col, value } = move;
+    const normalizedValue = value === null ? 0 : value;
     
     // 验证参数
     if (row < 0 || row > 8 || col < 0 || col > 8) {
       throw new Error(`Invalid cell position: row=${row}, col=${col}`);
     }
-    if (value < 0 || value > 9) {
+    if (!Number.isInteger(normalizedValue) || normalizedValue < 0 || normalizedValue > 9) {
       throw new Error(`Invalid value: ${value}`);
     }
 
@@ -142,14 +143,20 @@ export class Sudoku {
     const key = this._cellKey(row, col);
     const currentValue = this.userMoves.has(key) ? this.userMoves.get(key) : 0;
 
-    if (currentValue === value) {
+    if (normalizedValue !== 0 && this._hasConflictAt(row, col, normalizedValue)) {
+      throw new Error(
+        `Invalid guess: placing ${normalizedValue} at row=${row}, col=${col} violates Sudoku rules`,
+      );
+    }
+
+    if (currentValue === normalizedValue) {
       return;
     }
 
-    if (value === 0) {
+    if (normalizedValue === 0) {
       this.userMoves.delete(key);
     } else {
-      this.userMoves.set(key, value);
+      this.userMoves.set(key, normalizedValue);
     }
   }
 
@@ -217,6 +224,38 @@ export class Sudoku {
   }
 
   /**
+   * 判断在指定位置放置 value 是否会造成行/列/宫冲突
+   * @private
+   */
+  _hasConflictAt(row, col, value) {
+    const grid = this.getGrid();
+
+    // 排除当前位置，再进行冲突检查
+    for (let index = 0; index < 9; index++) {
+      if (index !== col && grid[row][index] === value) {
+        return true;
+      }
+
+      if (index !== row && grid[index][col] === value) {
+        return true;
+      }
+    }
+
+    const boxRowStart = Math.floor(row / 3) * 3;
+    const boxColStart = Math.floor(col / 3) * 3;
+
+    for (let y = boxRowStart; y < boxRowStart + 3; y++) {
+      for (let x = boxColStart; x < boxColStart + 3; x++) {
+        if ((y !== row || x !== col) && grid[y][x] === value) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * 格式化棋盘为可读字符串
    * @private
    */
@@ -265,18 +304,20 @@ export function createSudoku(initialGrid) {
  * @returns {Sudoku}
  */
 export function createSudokuFromJSON(json) {
-  const sudoku = Object.create(Sudoku.prototype);
-  sudoku.initialGrid = sudoku._freezeGrid(sudoku._deepCopy(json.initialGrid));
-  sudoku.userMoves = new Map();
+  const sudoku = new Sudoku(json.initialGrid);
 
   if (Array.isArray(json.userMoves)) {
-    sudoku.userMoves = new Map(json.userMoves);
+    for (const [key, value] of json.userMoves) {
+      const row = Math.floor(key / 9);
+      const col = key % 9;
+      sudoku.guess({ row, col, value });
+    }
   } else if (Array.isArray(json.userGrid)) {
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
         const value = json.userGrid[row][col];
         if (value !== sudoku.initialGrid[row][col]) {
-          sudoku.userMoves.set(row * 9 + col, value);
+          sudoku.guess({ row, col, value });
         }
       }
     }
