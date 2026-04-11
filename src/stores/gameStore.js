@@ -133,6 +133,7 @@ export function createGameStore(options = {}) {
   
   // 响应式 store：当前棋盘网格
   // 每当 game 变化时，自动更新 grid
+  //UI 的 grid 来自 Game -> Sudoku 的导出状态，满足UI 中看到的 grid 必须来自你的领域对象，或来自由你的领域对象导出的响应式视图状态的要求
   const grid = derived(gameInstance, $game => 
     $game.getSudoku().getGrid()
   );
@@ -153,6 +154,7 @@ export function createGameStore(options = {}) {
     isWon($game.getSudoku())
   );
   
+  //canUndo/canRedo 也是由领域对象派生，按钮状态会联动刷新
   // 响应式 store：是否可以撤销
   const canUndo = derived(gameInstance, $game => 
     $game.canUndo()
@@ -169,6 +171,7 @@ export function createGameStore(options = {}) {
    * @param {number} col
    * @param {number} value
    */
+  //gameStore.guess 再转发到领域对象 Game.guess
   function guess(row, col, value) {
     gameInstance.update($game => {
       $game.guess({ row, col, value });
@@ -176,6 +179,7 @@ export function createGameStore(options = {}) {
     });
   }
 
+  //gameStore 转发到 Game.undo/redo
   /**
    * UI 命令：撤销
    */
@@ -219,6 +223,7 @@ export function createGameStore(options = {}) {
    * UI 命令：从 sencode 开始自定义游戏
    * @param {string} sencode
    */
+  //创建或加载Sudoku
   function startCustom(sencode) {
     newGame(decodeSencode(sencode));
   }

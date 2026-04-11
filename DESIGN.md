@@ -360,6 +360,54 @@ const grid = derived(gameInstance, $game =>
 
 ### 6.0 本次作业重点问题（可直接答辩）
 
+### 6.1 作业核心要求对照（5 项）
+
+本节用于直接回答本次作业最重要的问题：领域对象是否已经真正接入 Svelte 的真实使用流程。
+
+1. **开始一局游戏（创建 Game + 创建或加载 Sudoku）**
+  - `App.svelte` 启动时通过 `createGameStore()` 初始化游戏入口。
+  - `gameStore` 内部先创建 `Sudoku`，再创建 `Game`。
+  - 新局与题码加载都通过 `newGame/startNew/startCustom` 进入同一条领域对象创建链路。
+
+2. **界面渲染当前局面（grid 来自领域对象）**
+  - `grid` 是 `derived(gameInstance, ...)` 计算出来的响应式状态。
+  - `grid` 的来源是 `$game.getSudoku().getGrid()`，即领域对象导出的视图状态。
+  - 棋盘组件只消费 `$gridStore` 渲染，不直接读取底层内部字段。
+
+3. **用户输入必须调用 Game/Sudoku 接口**
+  - `Keyboard` 输入调用 `gameStore.guess(...)`。
+  - `gameStore.guess` 再转发到 `$game.guess(...)`。
+  - `Game.guess` 内部调用 `Sudoku.guess` 执行真实业务规则。
+
+4. **Undo / Redo 必须调用领域对象逻辑**
+  - 界面按钮调用 `gameStore.undo()/redo()`。
+  - `gameStore` 转发到 `$game.undo()/redo()`。
+  - 真实撤销重做逻辑由 `Game` 的历史机制执行（操作日志 + 可逆操作）。
+
+5. **领域对象变化后，Svelte 界面自动更新**
+  - `gameInstance.update/set` 触发 store 通知。
+  - `grid/invalidCells/canUndo/canRedo` 等 `derived` 状态自动重算。
+  - 组件通过 `$store` 语法自动刷新，无需手动 DOM 更新。
+
+**对照结论**：以上 5 项要求均已满足，且链路发生在真实 UI 交互中，而不是仅在测试代码中。
+
+### 6.2 与上次作业（HW1）的关键区别
+
+1. **HW1 的典型问题**
+  - 领域对象更多用于测试契约；真实界面流程不完整地依赖领域层。
+  - UI 侧更容易出现直接处理数组/状态细节的写法。
+
+2. **本次 HW1.1 的本质变化**
+  - 形成了稳定链路：
+    `UI 事件 -> gameStore 命令 -> Game -> Sudoku -> derived 状态 -> UI 刷新`
+  - 也就是说，领域对象从“存在于工程中”升级为“真实运行时主路径的一部分”。
+
+3. **回答核心问题**
+  - “将领域对象真正接入 Svelte 真实使用流程和上次作业有什么区别？”
+    区别在于：这次的界面主流程确实经过 `Game/Sudoku`，不再只是概念上有领域类。
+  - “真实游戏界面的主要流程，是否真正通过领域对象完成？”
+    是。输入、开局、撤销、重做、渲染状态投影都经过了领域对象链路。
+
 #### 重点问题 1：Svelte 的响应式机制如何与领域对象协作？
 
 本项目采用了“**领域对象 + Store Adapter + Svelte 组件**”的协作方式，而不是让组件直接修改二维数组。
