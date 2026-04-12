@@ -1,4 +1,4 @@
-# 数独游戏设计文档 (Homework 1.1)
+﻿# 数独游戏设计文档 (Homework 1.1)
 
 ## 一、概述
 
@@ -80,7 +80,7 @@ Store Adapter:
 Store Adapter 的 derived store 自动更新：
   - grid = $gameInstance.getSudoku().getGrid()
   - invalidCells = $gameInstance.getSudoku().validate().invalidCells
-  - won = isWon($gameInstance.getSudoku())
+  - won = $gameInstance.isWon()
     ↓
 Svelte 自动检测 $grid、$invalidCells、$won 变化
     ↓
@@ -185,8 +185,10 @@ game.guess() // 在 undo 后调用
 ```javascript
 {
   grid,           // 当前棋盘 [9][9] 数组
+  givenGrid,      // 初始题面（givens）
   invalidCells,   // 冲突的单元格数组 (e.g., ["0,1", "2,3"])
   won,            // 是否赢了 (boolean)
+  paused,         // 是否暂停 (boolean)
   canUndo,        // 是否能撤销 (boolean)
   canRedo,        // 是否能重做 (boolean)
 }
@@ -200,6 +202,11 @@ game.guess() // 在 undo 后调用
   undo(),                  // 撤销
   redo(),                  // 重做
   newGame(initialGrid),    // 开始新游戏
+  startNew(difficulty),    // 按难度开局
+  startCustom(sencode),    // 从题码开局
+  pause()/resume()/togglePause(),
+  serialize()/canImportCode()/importCode(),
+  applyHint(row, col),
 }
 ```
 
@@ -270,7 +277,7 @@ src/components/
 
 - **核心局面状态**：`grid`、`givenGrid`
 - **规则派生状态**：`invalidCells`、`won`
-- **流程派生状态**：`canUndo`、`canRedo`
+- **流程派生状态**：`paused`、`canUndo`、`canRedo`
 
 这些状态全部由 `gameInstance` 派生，保证单一数据源（Single Source of Truth）。
 
@@ -365,83 +372,13 @@ const grid = derived(gameInstance, $game =>
 
 ---
 
-## 五、相比 HW1 的改进
+## 五、关键问题解答
 
-### 5.1 HW1 的问题
+### 5.0 本次作业重点问题
 
-在 HW1 中：
-1. **领域对象只在测试中使用**
-   - Sudoku 和 Game 类被设计出来，但真实 UI 没有使用
-  - UI 仍然直接改二维数组状态
+### 5.1 作业核心要求
 
-2. **UI 逻辑复杂，状态分散**
-   - Undo/Redo 逻辑（如果有实现）散落在组件中
-   - 没有统一的状态管理入口
-
-3. **难以测试和维护**
-   - 业务逻辑与 UI 耦合，不好单独测试
-   - 改 UI 可能影响业务逻辑
-
-### 5.2 HW1.1 的改进
-
-1. **领域对象成为核心**
-   - UI 通过 Store Adapter 消费 Game/Sudoku
-   - 所有游戏操作都经过领域对象
-   - Undo/Redo 作为游戏类的核心功能
-
-2. **清晰的三层架构**
-   ```
-   UI (Svelte)
-      ↓
-   Store Adapter (gameStore)
-      ↓
-   Domain Objects (Game/Sudoku)
-   ```
-
-3. **响应式绑定清晰**
-   - UI 只订阅 store 暴露的状态
-   - 不需要关心内部实现
-   - 改变业务逻辑时，UI 代码不需要改
-
-4. **更好的可测试性**
-   - 领域对象可单独测试（HW1 的测试都通过了）
-   - Store Adapter 可单独测试
-   - UI 可单独测试
-
-### 5.3 针对 HW1 Review 的补充修复
-
-| 问题 | 风险 | 修复 | 验证 |
-|------|------|------|------|
-| `Sudoku.guess` 可能接受冲突落子 | 领域对象进入业务非法状态（行/列/宫冲突） | 在 `guess` 中加入落子前冲突检查，冲突时抛错；同时补充 move 参数完整性与坐标/值域校验 | 新增冲突落子测试通过：`tests/hw1/02-sudoku-basic.test.js` |
-| `Sudoku` 构造阶段缺少严格入口校验 | 可以创建出结构非法或初始冲突的对象，污染后续流程 | 在构造函数中加入 9x9 结构校验、0-9 值域校验、初始盘面冲突校验 | 新增“非法 shape / 初始冲突应拒绝”测试通过：`tests/hw1/02-sudoku-basic.test.js` |
-| `createSudokuFromJSON` 可能绕过规则恢复对象 | 存档边界失去约束，反序列化对象不可信 | fromJSON 改为“先构造再通过 `sudoku.guess(...)` 回放”，并校验 payload 与 `userMoves` key 范围 | 新增“非法 Sudoku JSON 恢复失败”测试通过：`tests/hw1/05-serialization.test.js` |
-| `createGameFromJSON` 对 history/currentIndex 约束不足 | 可恢复出索引越界或畸形历史对象，Undo/Redo 行为不可信 | 增加 `history` 结构、`currentIndex` 边界、operation 类型与 move/previousValue 值域校验 | 新增“越界 currentIndex / 畸形 operation 应拒绝”测试通过：`tests/hw1/05-serialization.test.js` |
-| 空值语义对外不够统一（清空行为） | 调用方需要猜测内部表示，易出现约定歧义 | `guess` 支持 `number | null`，内部统一归一为 `0` 表示清空 | 现有序列化、Undo/Redo、基础行为测试全通过 |
-
-本轮修复后的回归结果：`npm run test` 全部通过（5 files / 21 tests）。
-
-### 5.4 设计 Trade-offs
-
-**优点**：
-- ✅ 关注点分离清晰
-- ✅ 易于扩展功能（如添加新的 UI 状态、操作）
-- ✅ 业务逻辑与 UI 完全解耦
-- ✅ Undo/Redo 从框架级别支持
-
-**缺点**：
-- ❌ 层次增加了，性能可能轻微下降（但对小应用忽略不计）
-- ❌ 代码量增加
-- ❌ 新开发者需要理解多层架构
-
----
-
-## 六、关键问题解答
-
-### 6.0 本次作业重点问题（可直接答辩）
-
-### 6.1 作业核心要求对照（5 项）
-
-本节用于直接回答本次作业最重要的问题：领域对象是否已经真正接入 Svelte 的真实使用流程。
+直接回答本次作业最重要的问题：领域对象是否已经真正接入 Svelte 的真实使用流程以及具体是怎么接入的
 
 1. **开始一局游戏（创建 Game + 创建或加载 Sudoku）**
   - `App.svelte` 启动时通过 `createGameStore()` 初始化游戏入口。
@@ -468,9 +405,9 @@ const grid = derived(gameInstance, $game =>
   - `grid/invalidCells/canUndo/canRedo` 等 `derived` 状态自动重算。
   - 组件通过 `$store` 语法自动刷新，无需手动 DOM 更新。
 
-**对照结论**：以上 5 项要求均已满足，且链路发生在真实 UI 交互中，而不是仅在测试代码中。
+**结论**：以上作业要求均已满足，且链路发生在真实 UI 交互中，而不是仅在测试代码中。
 
-### 6.2 与上次作业（HW1）的关键区别
+### 5.2 与上次作业（HW1）的关键区别
 
 1. **HW1 的典型问题**
   - 领域对象更多用于测试契约；真实界面流程不完整地依赖领域层。
@@ -561,7 +498,7 @@ View 层**不直接依赖 `Sudoku`/`Game` 类**，而是统一依赖 `gameStore`
 - 领域对象关注“操作是否合法、历史如何维护”
 - Store Adapter 负责两者之间的数据契约
 
-### 6.3 Svelte 响应式机制：本项目必须理解的 5 个问题
+### 5.3 Svelte 响应式机制：本项目必须理解的 5 个问题
 
 #### Q1: 为什么修改对象内部字段后，界面不一定自动更新？
 
@@ -663,7 +600,7 @@ const grid = derived(gameInstance, $game => $game.getSudoku().getGrid());
 **如果错误地直接 mutate 对象**：
 你会绕过 `update/set` 通知链，导致 `derived` 不重算，界面出现“数据改了但不刷新”或“局部状态不同步”的问题。
 
-### 6.4 UML 类图（边界与依赖）
+### 5.4 UML 类图（边界与依赖）
 
 ```mermaid
 classDiagram
@@ -725,7 +662,7 @@ classDiagram
 - Domain 不依赖 Svelte store。
 - Adapter 是唯一状态入口（single source of truth）。
 
-### 6.5 UML 时序图（用户输入）
+### 5.5 UML 时序图（用户输入）
 
 ```mermaid
 sequenceDiagram
@@ -746,7 +683,7 @@ sequenceDiagram
   B-->>U: 界面自动刷新
 ```
 
-### 6.6 UML 状态图（暂停/恢复/胜利）
+### 5.6 UML 状态图（暂停/恢复/胜利）
 
 ```mermaid
 stateDiagram-v2
@@ -758,7 +695,7 @@ stateDiagram-v2
   Paused --> Paused : importCode() / startCustom()
 ```
 
-### 6.7 Trade-off 表
+### 5.7 Trade-off 表
 
 | 设计决策 | 收益 | 代价 | 为什么可接受 |
 |---|---|---|---|
@@ -768,7 +705,7 @@ stateDiagram-v2
 | 导入支持 JSON + legacy sencode | 兼容旧分享链路，平滑迁移 | 校验分支增多 | 有助于避免线上/课堂演示失败 |
 | pause/resume 统一到 gameStore | 单状态入口，避免双系统分叉 | Adapter 需负责 timer 协同 | 明确了状态边界，便于答辩说明 |
 
-### 6.8 与评分项逐条对齐（Rubric Mapping）
+### 5.8 与评分项逐条对齐（Rubric Mapping）
 
 | 评分项 | 代码证据 | 测试证据 | 说明 |
 |---|---|---|---|
@@ -777,6 +714,77 @@ stateDiagram-v2
 | 领域对象改进质量（20） | `Game` 操作日志历史、`Sudoku` 稀疏 `userMoves`、严格序列化 | `tests/hw1/05-serialization.test.js` | 相比 HW1 有实质结构改进 |
 | View-Model/Adapter（10） | `createGameStore` 统一桥接；View 仅读状态并发命令 | `tests/hw1/06-ui-integration.test.js` | 边界清楚，组件无核心业务逻辑 |
 | 文档质量（15） | 本节 UML + 时序 + trade-off + 机制解释 | 与测试列表一致 | 可支撑课堂问答与助教核查 |
+
+---
+
+## 六、相比 HW1 的改进
+
+### 6.1 HW1 的问题
+
+在 HW1 中：
+1. **领域对象只在测试中使用**
+   - Sudoku 和 Game 类被设计出来，但真实 UI 没有使用
+  - UI 仍然直接改二维数组状态
+
+2. **UI 逻辑复杂，状态分散**
+   - Undo/Redo 逻辑（如果有实现）散落在组件中
+   - 没有统一的状态管理入口
+
+3. **难以测试和维护**
+   - 业务逻辑与 UI 耦合，不好单独测试
+   - 改 UI 可能影响业务逻辑
+
+### 6.2 HW1.1 的改进
+
+1. **领域对象成为核心**
+   - UI 通过 Store Adapter 消费 Game/Sudoku
+   - 所有游戏操作都经过领域对象
+   - Undo/Redo 作为游戏类的核心功能
+
+2. **清晰的三层架构**
+   ```
+   UI (Svelte)
+      ↓
+   Store Adapter (gameStore)
+      ↓
+   Domain Objects (Game/Sudoku)
+   ```
+
+3. **响应式绑定清晰**
+   - UI 只订阅 store 暴露的状态
+   - 不需要关心内部实现
+   - 改变业务逻辑时，UI 代码不需要改
+
+4. **更好的可测试性**
+   - 领域对象可单独测试（HW1 的测试都通过了）
+   - Store Adapter 可单独测试
+   - UI 可单独测试
+
+### 6.3 针对 HW1 Review 的补充修复
+
+| 问题 | 风险 | 修复 | 验证 |
+|------|------|------|------|
+| `Sudoku.guess` 输入边界不清晰 | 组件调用时容易出现值域/坐标越界等异常输入 | 在 `guess` 中补充 move 参数完整性与坐标/值域校验；初始 givens 位置输入被忽略 | 基础行为与边界测试通过：`tests/hw1/02-sudoku-basic.test.js` |
+| `Sudoku` 构造阶段缺少严格入口校验 | 可以创建出结构非法或初始冲突的对象，污染后续流程 | 在构造函数中加入 9x9 结构校验、0-9 值域校验、初始盘面冲突校验 | 新增“非法 shape / 初始冲突应拒绝”测试通过：`tests/hw1/02-sudoku-basic.test.js` |
+| `createSudokuFromJSON` 可能绕过规则恢复对象 | 存档边界失去约束，反序列化对象不可信 | fromJSON 改为“先构造再通过 `sudoku.guess(...)` 回放”，并校验 payload 与 `userMoves` key 范围 | 新增“非法 Sudoku JSON 恢复失败”测试通过：`tests/hw1/05-serialization.test.js` |
+| `createGameFromJSON` 对 history/currentIndex 约束不足 | 可恢复出索引越界或畸形历史对象，Undo/Redo 行为不可信 | 增加 `history` 结构、`currentIndex` 边界、operation 类型与 move/previousValue 值域校验 | 新增“越界 currentIndex / 畸形 operation 应拒绝”测试通过：`tests/hw1/05-serialization.test.js` |
+| 空值语义对外不够统一（清空行为） | 调用方需要猜测内部表示，易出现约定歧义 | `guess` 支持 `number | null`，内部统一归一为 `0` 表示清空 | 现有序列化、Undo/Redo、基础行为测试全通过 |
+| 游戏流程状态入口分散（pause/resume） | 容易出现界面状态与计时状态不一致 | pause/resume/togglePause 统一收口到 `gameStore`，并在 adapter 内同步 `timer` | UI 集成测试通过：`tests/hw1/06-ui-integration.test.js` |
+
+本轮修复后的回归结果：`npm run test` 全部通过（6 files / 30 tests）。
+
+### 6.4 设计 Trade-offs
+
+**优点**：
+- ✅ 关注点分离清晰
+- ✅ 易于扩展功能（如添加新的 UI 状态、操作）
+- ✅ 业务逻辑与 UI 完全解耦
+- ✅ Undo/Redo 从框架级别支持
+
+**缺点**：
+- ❌ 层次增加了，性能可能轻微下降（但对小应用忽略不计）
+- ❌ 代码量增加
+- ❌ 新开发者需要理解多层架构
 
 ---
 
@@ -803,7 +811,7 @@ stateDiagram-v2
 import { createGameStore } from './stores/gameStore.js';
 
 export let gameStore = createGameStore();
-// 此时游戏已以默认空棋盘初始化
+// 此时游戏会以默认 easy 难度题面初始化
 ```
 
 ### 用户操作（在任何组件中）：
@@ -876,3 +884,4 @@ gameStore.newGame(initialGrid);
 5. **旧入口统一到 gameStore（包括 pause/resume 与导入导出入口）**
 
 这为后续 Svelte 5 迁移、功能扩展等奠定了坚实基础。
+
